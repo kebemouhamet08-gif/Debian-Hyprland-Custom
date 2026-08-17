@@ -1,0 +1,162 @@
+@define-color glass rgba(14, 15, 22, 0.82);
+@define-color glass_hover rgba(52, 24, 38, 0.92);
+@define-color accent #e23864;
+@define-color accent_soft rgba(226, 56, 100, 0.48);
+@define-color text #f3edf2;
+@define-color muted #b8aeb8;
+@import url("panel-colors.css");
+
+* {
+  border: none;
+  border-radius: 0;
+  min-height: 0;
+  font-family: "JetBrainsMono Nerd Font", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+window#waybar { background: transparent; color: @text; }
+
+#custom-debian-menu, #custom-menu, #workspace-strip, #app-strip, #media-player,
+#session-strip, #clock, #custom-weather, #cpu, #memory, #temperature,
+#disk, #network, #bluetooth, #battery, #custom-wallpaper {
+  background: @glass;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.45);
+  margin: 2px 1px;
+  padding: 3px 9px;
+}
+
+#workspace-strip, #app-strip, #session-strip { padding: 0 4px; }
+
+#media-player {
+  padding: 0 5px;
+  border-color: @accent_soft;
+  background: @glass;
+}
+
+#workspace-strip #custom-workspace1,
+#workspace-strip #custom-workspace2,
+#workspace-strip #custom-workspace3,
+#workspace-strip #custom-workspace4,
+#workspace-strip #custom-workspace5,
+#app-strip #custom-terminal,
+#app-strip #custom-files,
+#app-strip #custom-browser,
+#session-strip #tray,
+#session-strip #custom-restore-minimized,
+#session-strip #custom-notifications,
+#session-strip #custom-overview,
+#session-strip #custom-power {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  margin: 0;
+  padding: 4px 9px;
+}
+
+#mpris {
+  color: @text;
+  min-width: 120px;
+  padding: 4px 10px;
+}
+
+#mpris.playing { color: @accent; }
+#mpris.paused { color: @muted; }
+#custom-cava_mviz {
+  color: @accent;
+  padding: 4px 7px;
+  font-size: 14px;
+}
+
+#custom-media-previous,
+#custom-media-play-pause,
+#custom-media-next {
+  color: @text;
+  background: transparent;
+  min-width: 16px;
+  padding: 4px 6px;
+}
+
+#custom-media-play-pause {
+  color: @accent;
+  font-size: 15px;
+}
+
+#custom-media-previous:hover,
+#custom-media-play-pause:hover,
+#custom-media-next:hover {
+  color: @accent;
+  background: @accent_soft;
+  border-radius: 8px;
+}
+
+#custom-workspace1, #custom-workspace2, #custom-workspace3,
+#custom-workspace4, #custom-workspace5 {
+  min-width: 18px;
+}
+
+#custom-workspace1.active, #custom-workspace2.active,
+#custom-workspace3.active, #custom-workspace4.active,
+#custom-workspace5.active {
+  color: @text;
+  background: rgba(226, 56, 100, 0.28);
+  border: 1px solid @accent_soft;
+  border-radius: 7px;
+}
+
+#custom-debian-menu, #custom-menu {
+  color: @accent;
+  font-size: 18px;
+  border-color: @accent_soft;
+  padding: 3px 13px;
+}
+
+#workspaces { padding: 2px 5px; }
+#workspaces button {
+  color: @muted;
+  background: transparent;
+  border-radius: 8px;
+  min-width: 18px;
+  margin: 1px;
+  padding: 2px 9px;
+}
+#workspaces button.active {
+  color: @text;
+  background: rgba(226, 56, 100, 0.28);
+  border: 1px solid @accent_soft;
+}
+#workspaces button.urgent { color: white; background: @accent; }
+
+#custom-terminal, #custom-files, #custom-browser,
+#custom-notifications, #custom-overview, #custom-power { padding: 4px 11px; }
+#custom-power, #custom-notifications { color: #ff708f; }
+#custom-restore-minimized {
+  color: #f1fa8c;
+  border-color: rgba(241, 250, 140, 0.48);
+  padding: 4px 11px;
+}
+#custom-wallpaper {
+  color: #ff708f;
+  border-color: @accent_soft;
+  padding: 7px 13px;
+}
+#temperature.critical, #battery.critical { color: #ff4d6d; }
+#battery.charging { color: #8bd49c; }
+
+#custom-debian-menu:hover, #custom-menu:hover, #workspaces button:hover, #custom-terminal:hover,
+#custom-files:hover, #custom-browser:hover, #clock:hover, #custom-weather:hover,
+#cpu:hover, #memory:hover, #temperature:hover, #disk:hover, #network:hover,
+#bluetooth:hover, #battery:hover, #custom-notifications:hover,
+#custom-overview:hover, #custom-power:hover,
+#custom-wallpaper:hover, #custom-restore-minimized:hover {
+  background: rgba(241, 250, 140, 0.18);
+}
+
+tooltip {
+  background: rgba(12, 13, 19, 0.96);
+  border: 1px solid @accent_soft;
+  border-radius: 10px;
+}
+tooltip label { color: @text; padding: 6px; }

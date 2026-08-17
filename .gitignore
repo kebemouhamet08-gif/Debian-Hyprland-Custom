@@ -1,0 +1,9 @@
+build/
+Install-Logs/
+*.log
+*.bak
+*.bak-*
+__pycache__/
+*.pyc
+.panel-state
+.dock-runtime.*

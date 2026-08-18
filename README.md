@@ -66,7 +66,7 @@ rendu plus sombre et les couleurs neutres. Les valeurs peuvent être ajustées a
 Une interface GTK 4 permet de gérer les fonds d'écran vidéo avec miniatures,
 recherche, import, choix du moniteur, volume, vitesse, décodage matériel et pause
 automatique en plein écran. Installez-la puis ouvrez-la depuis le menu des
-applications ou avec `Super+Alt+W` :
+applications ou avec la touche des fonds d'écran `Super+W` :
 
 ```bash
 chmod +x install-mpvpaper-engine.sh

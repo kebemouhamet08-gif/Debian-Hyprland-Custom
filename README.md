@@ -140,7 +140,9 @@ chmod +x install-mpvpaper-engine.sh
 9. Dans **Thèmes**, choisissez le mode clair ou sombre, le thème GTK, les icônes
    et le curseur parmi ceux installés sur la machine. Cliquez sur **Appliquer le
    thème** : le réglage est conservé dans la session et utilisé par les
-   applications compatibles. Les nouvelles collections peuvent être installées
+   applications compatibles. MPVpaper Engine synchronise `gsettings` et les
+   configurations GTK 3/4 afin d'éviter qu'un ancien réglage remplace le choix.
+   Les nouvelles collections peuvent être installées
    dans `~/.themes` pour GTK et `~/.icons` pour les icônes ou curseurs ; elles
    apparaîtront dans les listes au prochain lancement de MPVpaper Engine.
 

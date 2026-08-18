@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import configparser
 import hashlib
 from html.parser import HTMLParser
 import json
@@ -148,6 +149,29 @@ def desktop_interface_setting(key, fallback=""):
         return Gio.Settings.new("org.gnome.desktop.interface").get_string(key)
     except GLib.Error:
         return fallback
+
+
+def write_gtk_theme_settings(values, dark):
+    for version in ("gtk-3.0", "gtk-4.0"):
+        settings_dir = Path.home() / ".config" / version
+        settings_file = settings_dir / "settings.ini"
+        parser = configparser.ConfigParser()
+        if settings_file.is_file():
+            parser.read(settings_file, encoding="utf-8")
+        if not parser.has_section("Settings"):
+            parser.add_section("Settings")
+        section = parser["Settings"]
+        section["gtk-theme-name"] = values["gtk-theme"]
+        section["gtk-icon-theme-name"] = values["icon-theme"]
+        section["gtk-cursor-theme-name"] = values["cursor-theme"]
+        section["gtk-application-prefer-dark-theme"] = "true" if dark else "false"
+        if version == "gtk-4.0":
+            section.pop("gtk-modules", None)
+        settings_dir.mkdir(parents=True, exist_ok=True)
+        temporary = settings_file.with_suffix(".tmp")
+        with temporary.open("w", encoding="utf-8") as stream:
+            parser.write(stream)
+        temporary.replace(settings_file)
 
 
 class TasteStore:
@@ -751,6 +775,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         try:
             for key, value in values.items():
                 settings.set_string(key, value)
+            write_gtk_theme_settings(values, mode == "Sombre")
             Adw.StyleManager.get_default().set_color_scheme(
                 Adw.ColorScheme.FORCE_DARK if mode == "Sombre"
                 else Adw.ColorScheme.FORCE_LIGHT if mode == "Clair"

@@ -66,7 +66,7 @@ rendu plus sombre et les couleurs neutres. Les valeurs peuvent être ajustées a
 Une interface GTK 4 permet de gérer les fonds d'écran vidéo avec miniatures,
 recherche, import, choix du moniteur, volume, vitesse, décodage matériel et pause
 automatique en plein écran. Installez-la puis ouvrez-la depuis le menu des
-applications ou avec la touche des fonds d'écran `Super+W` :
+applications ou avec le bouton **Fond d'écran** situé en bas de l'écran :
 
 ```bash
 chmod +x install-mpvpaper-engine.sh
@@ -75,6 +75,7 @@ chmod +x install-mpvpaper-engine.sh
 
 Les vidéos importées sont conservées dans `~/Pictures/Wallpapers/Live`. Le dernier
 fond peut être restauré automatiquement à l'ouverture de la session Hyprland.
+Le raccourci `Super+W` reste réservé au sélecteur standard de fonds d'écran fixes.
 
 ## v1 — Debian Glass / Waybar
 

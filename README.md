@@ -77,7 +77,8 @@ Les vidéos importées sont conservées dans `~/Pictures/Wallpapers/Live`. Le de
 fond peut être restauré automatiquement à l'ouverture de la session Hyprland.
 Le raccourci `Super+W` reste réservé au sélecteur standard de fonds d'écran fixes.
 Le bouton **Utiliser pour l'écran de connexion** extrait une image de la vidéo
-sélectionnée et l'installe dans le thème SDDM après confirmation administrateur.
+sélectionnée, ouvre un terminal d'autorisation et l'installe dans le thème SDDM
+après saisie du mot de passe administrateur.
 SDDM ne prenant pas en charge `mpvpaper`, l'écran de connexion reste une image fixe.
 
 ## v1 — Debian Glass / Waybar

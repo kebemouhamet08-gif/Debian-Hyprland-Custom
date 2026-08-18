@@ -348,7 +348,14 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             )
             if extract.returncode == 0:
                 result = subprocess.run(
-                    ["pkexec", str(SDDM_INSTALLER), str(output)],
+                    [
+                        "kitty", "--class", "mpvpaper-sddm-auth",
+                        "--title", "Autorisation SDDM",
+                        "bash", "-lc",
+                        'printf "Mot de passe administrateur requis pour modifier l écran de connexion.\\n"; '
+                        'sudo "$1" "$2"',
+                        "mpvpaper-sddm-auth", str(SDDM_INSTALLER), str(output),
+                    ],
                     capture_output=True, text=True, check=False,
                 )
             else:
@@ -362,7 +369,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         if result.returncode == 0:
             self.status.set_text("Fond de connexion installé. Il apparaîtra au prochain démarrage.")
         else:
-            self.status.set_text(result.stderr.strip() or "Installation du fond de connexion annulée")
+            self.status.set_text("Installation annulée ou mot de passe incorrect")
 
     def command_finished(self, action, result):
         self.apply_button.set_sensitive(self.selected is not None)

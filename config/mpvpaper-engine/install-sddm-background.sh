@@ -10,7 +10,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 patch_file="$script_dir/sddm-background.patch"
 
 if [ "$(id -u)" -ne 0 ]; then
-    printf 'Cette commande doit être exécutée avec pkexec.\n' >&2
+    printf 'Cette commande doit être exécutée avec sudo ou pkexec.\n' >&2
     exit 1
 fi
 if [ ! -f "$image" ]; then

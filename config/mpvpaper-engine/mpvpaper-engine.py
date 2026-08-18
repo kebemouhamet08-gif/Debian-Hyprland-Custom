@@ -40,11 +40,15 @@ DEFAULT_CONFIG = {
     "loop": True, "hardware_decode": True, "auto_pause": True, "autostart": True,
 }
 WALLPAPER_SOURCES = {
+    "Steam Workshop": "https://steamcommunity.com/workshop/browse?appid=431960",
     "MotionBGS": "https://motionbgs.com/",
     "MoeWalls": "https://moewalls.com/",
     "VSThemes": "https://vsthemes.org/en/wallpapers/page/4/",
 }
 DEFAULT_SUGGESTIONS = (
+    ("https://steamcommunity.com/workshop/browse?appid=431960", "Tendances Wallpaper Engine Workshop", "steamcommunity.com", "workshop trending community"),
+    ("https://steamcommunity.com/sharedfiles/filedetails/?id=2704773569", "[4K] CITRUS - go to class", "steamcommunity.com", "anime scene 4k popular"),
+    ("https://steamcommunity.com/sharedfiles/filedetails/?id=1579461169", "Top 50 New Wallpapers", "steamcommunity.com", "collection popular community"),
     ("https://motionbgs.com/brain-interface", "Brain Interface Live Wallpaper", "motionbgs.com", "technology sci-fi minimal"),
     ("https://motionbgs.com/cyberpunk-tokyo-city", "Cyberpunk Tokyo City Live Wallpaper", "motionbgs.com", "cyberpunk city games"),
     ("https://motionbgs.com/chihiro-spirited-away", "Chihiro Spirited Away Live Wallpaper", "motionbgs.com", "anime fantasy"),
@@ -58,6 +62,12 @@ DEFAULT_SUGGESTIONS = (
     ("https://vsthemes.org/en/wallpapers/page/4/", "Sélection animée VSThemes - page 4", "vsthemes.org", "collection animated discovery"),
     ("https://vsthemes.org/en/wallpapers/", "Nouveautés animées VSThemes", "vsthemes.org", "collection new discovery"),
 )
+SOURCE_PRIORITY = {
+    "steamcommunity.com": 0,
+    "motionbgs.com": 1,
+    "moewalls.com": 2,
+    "vsthemes.org": 3,
+}
 TAG_STOPWORDS = {
     "wallpaper", "live", "animated", "background", "video", "fond", "ecran",
     "the", "and", "for", "with", "from", "page", "https", "www", "com",
@@ -95,6 +105,9 @@ class TasteStore:
                (uri,title,source,tags,score,views,last_seen)
                VALUES(?,?,?,?,0.1,0,0)""",
             DEFAULT_SUGGESTIONS,
+        )
+        self.connection.execute(
+            "UPDATE candidates SET score=MAX(score,0.5) WHERE source='steamcommunity.com'"
         )
         self.connection.commit()
 
@@ -152,7 +165,11 @@ class TasteStore:
         best_by_source = {}
         for item in scored:
             best_by_source.setdefault(item[3], item)
-        for item in best_by_source.values():
+        source_leaders = sorted(
+            best_by_source.values(),
+            key=lambda item: SOURCE_PRIORITY.get(item[3], 99),
+        )
+        for item in source_leaders:
             result.append(item)
             selected_uris.add(item[1])
             if len(result) == limit:

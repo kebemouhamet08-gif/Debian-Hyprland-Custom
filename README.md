@@ -72,10 +72,13 @@ et le bouton de téléchargement utilise `yt-dlp` pour extraire la vidéo de la 
 L'onglet **Suggestions** utilise un graphe d'affinité SQLite local inspiré de Pinterest :
 les visites, téléchargements et applications renforcent les tags correspondants,
 puis les résultats sont classés et diversifiés à la demande, sans démon d'analyse.
-Des propositions variées issues de MotionBGS, MoeWalls et VSThemes sont fournies par
+Des propositions variées issues du Steam Workshop, de MotionBGS, MoeWalls et VSThemes sont fournies par
 défaut afin que le fil soit utile avant les premières interactions. Le mélange réserve
-une place à chaque site disponible, puis complète selon le score et la diversité ; le
+une place à chaque site disponible en donnant la priorité au Workshop, puis complète
+selon le score et la diversité ; le
 faible poids initial laisse rapidement place aux goûts réels.
+Les projets Steam de type `Scene` ou `Web` nécessitent Wallpaper Engine/Steam ; les
+éléments de type `Video` ne sont importables que si Steam expose un fichier accessible.
 Le fil utilise des cartes visuelles avec grande miniature mise en cache, titre, source,
 note, tags, favori et ouverture directe de la fiche dans **Découvrir**.
 Installez-la puis ouvrez-la depuis le menu des

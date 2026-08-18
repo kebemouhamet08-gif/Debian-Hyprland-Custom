@@ -24,6 +24,7 @@ METADATA_FILE = CACHE_DIR.parent / "metadata.json"
 LIBRARY_DIR = Path.home() / "Pictures" / "Wallpapers" / "Live"
 LEGACY_LIBRARY_DIR = Path.home() / "Pictures" / "wallpapers"
 CONTROLLER = Path.home() / ".local" / "lib" / "mpvpaper-engine" / "mpvpaper-enginectl.py"
+SDDM_INSTALLER = Path.home() / ".local" / "lib" / "mpvpaper-engine" / "install-sddm-background.sh"
 DEFAULT_CONFIG = {
     "wallpaper": "", "output": "*", "volume": 0, "speed": 1.0,
     "loop": True, "hardware_decode": True, "auto_pause": True, "autostart": True,
@@ -193,6 +194,10 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.apply_button.set_sensitive(self.selected is not None)
         self.apply_button.connect("clicked", self.apply_wallpaper)
         inspector.append(self.apply_button)
+        self.login_button = Gtk.Button(label="Utiliser pour l’écran de connexion")
+        self.login_button.set_sensitive(self.selected is not None)
+        self.login_button.connect("clicked", self.set_login_wallpaper)
+        inspector.append(self.login_button)
         self.status = Gtk.Label(label="", xalign=0, wrap=True, css_classes=["dim-label"])
         inspector.append(self.status)
         inspector_scroll.set_child(inspector)
@@ -269,6 +274,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.selected = selected[0].path
         self.selected_label.set_text(self.selected.name)
         self.apply_button.set_sensitive(True)
+        self.login_button.set_sensitive(True)
 
     def import_videos(self, _button):
         dialog = Gtk.FileDialog(title="Importer des fonds vidéo", modal=True)
@@ -326,6 +332,37 @@ class MPVpaperWindow(Adw.ApplicationWindow):
     def stop_wallpaper(self, _button):
         self.status.set_text("Arrêt du fond vidéo…")
         self.run_controller("stop")
+
+    def set_login_wallpaper(self, _button):
+        if not self.selected:
+            return
+        self.login_button.set_sensitive(False)
+        self.status.set_text("Extraction de l’image de connexion…")
+
+        def worker():
+            output = CACHE_DIR.parent / "login-background.jpeg"
+            extract = subprocess.run(
+                ["ffmpegthumbnailer", "-i", str(self.selected), "-o", str(output),
+                 "-s", "1920", "-t", "20"],
+                capture_output=True, text=True, check=False,
+            )
+            if extract.returncode == 0:
+                result = subprocess.run(
+                    ["pkexec", str(SDDM_INSTALLER), str(output)],
+                    capture_output=True, text=True, check=False,
+                )
+            else:
+                result = extract
+            GLib.idle_add(self.login_wallpaper_finished, result)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def login_wallpaper_finished(self, result):
+        self.login_button.set_sensitive(self.selected is not None)
+        if result.returncode == 0:
+            self.status.set_text("Fond de connexion installé. Il apparaîtra au prochain démarrage.")
+        else:
+            self.status.set_text(result.stderr.strip() or "Installation du fond de connexion annulée")
 
     def command_finished(self, action, result):
         self.apply_button.set_sensitive(self.selected is not None)

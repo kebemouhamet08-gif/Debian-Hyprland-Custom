@@ -33,6 +33,8 @@ done
 
 install -m 0755 "$source_dir/mpvpaper-engine.py" "$install_dir/mpvpaper-engine.py"
 install -m 0755 "$source_dir/mpvpaper-enginectl.py" "$install_dir/mpvpaper-enginectl.py"
+install -m 0755 "$source_dir/install-sddm-background.sh" "$install_dir/install-sddm-background.sh"
+install -m 0644 "$source_dir/sddm-background.patch" "$install_dir/sddm-background.patch"
 install -m 0644 "$source_dir/io.github.kebemouhamet08.MPVpaperEngine.desktop" \
     "$desktop_dir/io.github.kebemouhamet08.MPVpaperEngine.desktop"
 ln -sfn "$install_dir/mpvpaper-engine.py" "$bin_dir/mpvpaper-engine"

@@ -35,6 +35,25 @@ Raccourcis principaux : `Super+Espace` lanceur, `Super+D` tableau de bord,
 `Ctrl+Alt+Suppr` menu de session. Le fond d'écran est lu depuis
 `~/Pictures/Wallpapers`.
 
+### Écran externe
+
+Hyprland détecte automatiquement les écrans branchés, mais leur disposition
+doit être enregistrée une première fois. Lancez `nwg-displays`, placez l'écran
+externe à gauche ou à droite de l'écran intégré, choisissez sa résolution et sa
+fréquence, puis utilisez **Apply** et **Save**. L'outil écrit une configuration
+précise dans `~/.config/hypr/monitors.conf` et remplace les règles génériques qui
+peuvent sélectionner un mode imprévisible.
+
+Pour diagnostiquer un écran non détecté, utilisez `hyprctl monitors all`. Sur un
+portable, l'écran interne est généralement nommé `eDP-1` et une sortie HDMI
+`HDMI-A-1`.
+
+### Verrouillage sous Debian
+
+Le raccourci de verrouillage privilégie `/usr/bin/hyprlock`, fourni par le paquet
+Debian et intégré à PAM. Cela évite qu'une compilation installée dans
+`/usr/local/bin` masque la version du système et refuse un mot de passe valide.
+
 ## v1 — Debian Glass / Waybar
 
 Une surcouche réutilisable pour les dotfiles

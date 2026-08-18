@@ -192,7 +192,7 @@
     "format": "󰸉  Fond d’écran",
     "tooltip": true,
     "tooltip-format": "Clic gauche : fonds vidéo MPVpaper\nClic droit : fond aléatoire",
-    "on-click": "$HOME/.local/bin/mpvpaper-engine",
+    "on-click": "$HOME/.local/bin/mpvpaper-engine-toggle",
     "on-click-right": "$HOME/.config/hypr/UserScripts/WallpaperWithWaybar.sh random"
   }
 }

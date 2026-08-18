@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+unit="mpvpaper-engine-ui.service"
+
+if systemctl --user is-active --quiet "$unit"; then
+    systemctl --user stop "$unit"
+    exit 0
+fi
+
+systemctl --user reset-failed "$unit" 2>/dev/null || true
+systemd-run --user --unit="${unit%.service}" --collect \
+    "$HOME/.local/bin/mpvpaper-engine"

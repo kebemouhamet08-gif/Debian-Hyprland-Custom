@@ -73,6 +73,9 @@ chmod +x install-mpvpaper-engine.sh
 ./install-mpvpaper-engine.sh
 ```
 
+Le bouton inférieur fonctionne comme une bascule : un premier clic ouvre
+MPVpaper Engine et un second clic ferme sa fenêtre.
+
 Les vidéos importées sont conservées dans `~/Pictures/Wallpapers/Live`. Le dernier
 fond peut être restauré automatiquement à l'ouverture de la session Hyprland.
 Le raccourci `Super+W` reste réservé au sélecteur standard de fonds d'écran fixes.

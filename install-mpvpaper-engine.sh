@@ -25,6 +25,7 @@ python3 -c "import gi; gi.require_version('Adw', '1'); gi.require_version('Gtk',
 
 mkdir -p "$backup_dir" "$install_dir" "$bin_dir" "$desktop_dir"
 for path in "$install_dir" "$bin_dir/mpvpaper-engine" "$bin_dir/mpvpaper-enginectl" \
+    "$bin_dir/mpvpaper-engine-toggle" \
     "$desktop_dir/io.github.kebemouhamet08.MPVpaperEngine.desktop"; do
     if [ -e "$path" ] || [ -L "$path" ]; then
         cp -a --parents "$path" "$backup_dir/"
@@ -33,12 +34,14 @@ done
 
 install -m 0755 "$source_dir/mpvpaper-engine.py" "$install_dir/mpvpaper-engine.py"
 install -m 0755 "$source_dir/mpvpaper-enginectl.py" "$install_dir/mpvpaper-enginectl.py"
+install -m 0755 "$source_dir/mpvpaper-engine-toggle" "$install_dir/mpvpaper-engine-toggle"
 install -m 0755 "$source_dir/install-sddm-background.sh" "$install_dir/install-sddm-background.sh"
 install -m 0644 "$source_dir/sddm-background.patch" "$install_dir/sddm-background.patch"
 install -m 0644 "$source_dir/io.github.kebemouhamet08.MPVpaperEngine.desktop" \
     "$desktop_dir/io.github.kebemouhamet08.MPVpaperEngine.desktop"
 ln -sfn "$install_dir/mpvpaper-engine.py" "$bin_dir/mpvpaper-engine"
 ln -sfn "$install_dir/mpvpaper-enginectl.py" "$bin_dir/mpvpaper-enginectl"
+ln -sfn "$install_dir/mpvpaper-engine-toggle" "$bin_dir/mpvpaper-engine-toggle"
 
 mkdir -p "$HOME/Pictures/Wallpapers/Live"
 update-desktop-database "$desktop_dir" 2>/dev/null || true

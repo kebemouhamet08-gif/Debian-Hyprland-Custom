@@ -106,6 +106,43 @@ chmod +x install-mpvpaper-engine.sh
 ./install-mpvpaper-engine.sh
 ```
 
+#### Guide d'utilisation
+
+1. Ouvrez **MPVpaper Engine** avec le bouton **Fond d'écran** situé en bas de
+   Caelestia ou depuis le menu des applications. Appuyer une seconde fois sur
+   le bouton Caelestia ferme la fenêtre.
+2. Dans **Bibliothèque**, cliquez sur une miniature, choisissez l'écran dans
+   la liste **Écran**, puis réglez le volume, la vitesse, le décodage matériel
+   et la pause en plein écran. Cliquez sur **Appliquer le fond** pour valider.
+3. Pour attribuer des vidéos différentes, sélectionnez d'abord `eDP-1`,
+   appliquez sa vidéo, puis sélectionnez `HDMI-A-1` et appliquez l'autre vidéo.
+   N'utilisez **Tous les écrans** que pour afficher volontairement la même vidéo
+   partout, car ce choix remplace les affectations individuelles.
+4. Le bouton **+** importe une ou plusieurs vidéos déjà présentes sur le disque.
+   Le bouton vidéo accepte une adresse YouTube : collez l'URL, choisissez
+   `1080p`, `1440p` ou `2160p (4K)`, puis cliquez sur **Télécharger**. La vidéo
+   téléchargée rejoint automatiquement la bibliothèque.
+5. Dans **Découvrir**, choisissez Steam Workshop, YouTube TeshiiSan, MotionBGS,
+   MoeWalls ou VSThemes. Utilisez les flèches pour naviguer, le bouclier pour
+   activer ou désactiver le bloqueur de publicités et le bouton de téléchargement
+   pour importer la vidéo de la page affichée.
+6. Dans **Suggestions**, cliquez sur **Ouvrir** pour consulter une proposition
+   dans Découvrir ou sur le cœur pour renforcer ce type de contenu. Le bouton
+   d'actualisation recalcule le fil à partir des visites, téléchargements,
+   favoris et fonds appliqués.
+7. Les cartes YouTube affichent leurs vues et leurs J'aime. Leur note combine
+   60 % de portée des vues et 40 % de taux de J'aime ; les autres notes gagnent
+   progressivement en confiance selon les interactions locales.
+8. **Utiliser pour l'écran de connexion** extrait une image fixe de la vidéo
+   sélectionnée. Saisissez le mot de passe administrateur dans le terminal qui
+   s'ouvre pour l'installer dans SDDM. **Arrêter le fond vidéo** coupe les fonds
+   animés en cours sans supprimer les fichiers de la bibliothèque.
+
+Les miniatures peuvent prendre quelques secondes à apparaître lors de la première
+ouverture. Un téléchargement qui échoue peut provenir d'un site ayant changé son
+format ou d'une version trop ancienne de `yt-dlp`; l'application privilégie donc
+automatiquement `~/.local/bin/yt-dlp` lorsqu'il est installé.
+
 Le bouton inférieur fonctionne comme une bascule : un premier clic ouvre
 MPVpaper Engine et un second clic ferme sa fenêtre.
 

@@ -3,6 +3,7 @@
 import hashlib
 from html.parser import HTMLParser
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -42,6 +43,7 @@ DEFAULT_CONFIG = {
 }
 WALLPAPER_SOURCES = {
     "Steam Workshop": "https://steamcommunity.com/workshop/browse?appid=431960",
+    "YouTube · TeshiiSan": "https://www.youtube.com/@TeshiiSan/videos",
     "MotionBGS": "https://motionbgs.com/",
     "MoeWalls": "https://moewalls.com/",
     "VSThemes": "https://vsthemes.org/en/wallpapers/page/4/",
@@ -63,11 +65,18 @@ DEFAULT_SUGGESTIONS = (
     ("https://vsthemes.org/en/wallpapers/page/4/", "Sélection animée VSThemes - page 4", "vsthemes.org", "collection animated discovery"),
     ("https://vsthemes.org/en/wallpapers/", "Nouveautés animées VSThemes", "vsthemes.org", "collection new discovery"),
 )
+YOUTUBE_FEATURED = (
+    ("https://www.youtube.com/watch?v=fmN1RaWO9lc", "Furina Sentadão!", "youtube.com",
+     "teshiisan furina genshin popular", 249018, 13230),
+    ("https://www.youtube.com/watch?v=DEMaBg779gs", "Sandrone Sentadão!", "youtube.com",
+     "teshiisan sandrone genshin popular", 215998, 15038),
+)
 SOURCE_PRIORITY = {
     "steamcommunity.com": 0,
-    "motionbgs.com": 1,
-    "moewalls.com": 2,
-    "vsthemes.org": 3,
+    "youtube.com": 1,
+    "motionbgs.com": 2,
+    "moewalls.com": 3,
+    "vsthemes.org": 4,
 }
 AD_DOMAINS = (
     "doubleclick.net", "googlesyndication.com", "googleadservices.com",
@@ -125,12 +134,23 @@ class TasteStore:
             CREATE TABLE IF NOT EXISTS candidates (
                 uri TEXT PRIMARY KEY, title TEXT NOT NULL, source TEXT NOT NULL,
                 tags TEXT NOT NULL, score REAL NOT NULL DEFAULT 0,
-                views INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL
+                views INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL,
+                external_views INTEGER NOT NULL DEFAULT 0,
+                external_likes INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS tag_profile (
                 tag TEXT PRIMARY KEY, weight REAL NOT NULL DEFAULT 0
             );
         """)
+        columns = {row[1] for row in self.connection.execute("PRAGMA table_info(candidates)")}
+        if "external_views" not in columns:
+            self.connection.execute(
+                "ALTER TABLE candidates ADD COLUMN external_views INTEGER NOT NULL DEFAULT 0"
+            )
+        if "external_likes" not in columns:
+            self.connection.execute(
+                "ALTER TABLE candidates ADD COLUMN external_likes INTEGER NOT NULL DEFAULT 0"
+            )
         self.connection.executemany(
             "DELETE FROM candidates WHERE uri = ?",
             ((uri,) for uri in WALLPAPER_SOURCES.values()),
@@ -143,6 +163,15 @@ class TasteStore:
         )
         self.connection.execute(
             "UPDATE candidates SET score=MAX(score,0.5) WHERE source='steamcommunity.com'"
+        )
+        self.connection.executemany(
+            """INSERT INTO candidates
+               (uri,title,source,tags,score,views,last_seen,external_views,external_likes)
+               VALUES(?,?,?,?,0.1,0,0,?,?)
+               ON CONFLICT(uri) DO UPDATE SET title=excluded.title, source=excluded.source,
+               tags=excluded.tags, external_views=excluded.external_views,
+               external_likes=excluded.external_likes""",
+            YOUTUBE_FEATURED,
         )
         self.connection.commit()
 
@@ -186,27 +215,40 @@ class TasteStore:
     def recommendations(self, limit=20):
         profile = dict(self.connection.execute("SELECT tag,weight FROM tag_profile"))
         rows = self.connection.execute(
-            "SELECT uri,title,source,tags,score,views,last_seen FROM candidates LIMIT 200"
+            """SELECT uri,title,source,tags,score,views,last_seen,
+                      external_views,external_likes FROM candidates LIMIT 200"""
         ).fetchall()
         scored = []
-        for uri, title, source, tags_text, score, views, last_seen in rows:
+        for uri, title, source, tags_text, score, views, last_seen, external_views, external_likes in rows:
             tags = tags_text.split()
             affinity = sum(profile.get(tag, 0.0) for tag in tags)
             freshness = min(1.0, max(0.0, (time.time() - last_seen) / 604800))
-            total = score * 0.5 + affinity * 0.3 + freshness * 0.2 - views * 0.05
-            scored.append((total, uri, title, source, tags, score, views))
+            reach = min(1.0, math.log10(external_views + 1) / 6.0) if external_views else 0.0
+            like_rate = external_likes / external_views if external_views else 0.0
+            engagement = min(1.0, like_rate / 0.08)
+            popularity = reach * 0.6 + engagement * 0.4
+            total = (score * 0.5 + affinity * 0.3 + freshness * 0.2
+                     + popularity * 0.5 - views * 0.05)
+            scored.append((total, uri, title, source, tags, score, views, popularity,
+                           external_views, external_likes))
         if scored:
             minimum = min(item[0] for item in scored)
             maximum = max(item[0] for item in scored)
             span = maximum - minimum
             calibrated = []
-            for total, uri, title, source, tags, interaction_score, views in scored:
+            for (total, uri, title, source, tags, interaction_score, views, popularity,
+                 external_views, external_likes) in scored:
                 relative = 0.5 if span < 0.0001 else (total - minimum) / span
                 evidence = max(0.0, interaction_score - 0.1) + views * 0.5
                 confidence = min(1.0, evidence / 12.0)
-                raw_rating = 3.0 + relative * 2.0
-                rating = 3.0 + (raw_rating - 3.0) * confidence
-                calibrated.append((total, uri, title, source, tags, rating, confidence))
+                if external_views:
+                    rating = 3.0 + popularity * 2.0
+                    confidence = min(1.0, math.log10(external_views + 1) / 5.0)
+                else:
+                    raw_rating = 3.0 + relative * 2.0
+                    rating = 3.0 + (raw_rating - 3.0) * confidence
+                calibrated.append((total, uri, title, source, tags, rating, confidence,
+                                   external_views, external_likes))
             scored = calibrated
         scored.sort(reverse=True)
         result, selected_uris = [], set()
@@ -284,6 +326,14 @@ def page_download_url(uri):
 
 def suggestion_thumbnail_path(uri):
     return SUGGESTION_CACHE / f"{hashlib.sha256(uri.encode()).hexdigest()}.preview"
+
+
+def compact_count(value):
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.1f} M".replace(".0", "").replace(".", ",")
+    if value >= 1_000:
+        return f"{value / 1_000:.1f} k".replace(".0", "").replace(".", ",")
+    return str(value)
 
 
 def fetch_suggestion_thumbnail(uri, destination):
@@ -376,7 +426,7 @@ class WallpaperCard(Gtk.FlowBoxChild):
 
 class SuggestionCard(Gtk.FlowBoxChild):
     def __init__(self, title, source, tags, rating, confidence, thumbnail,
-                 open_callback, favorite_callback):
+                 external_views, external_likes, open_callback, favorite_callback):
         super().__init__()
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                           css_classes=["suggestion-card"])
@@ -388,12 +438,22 @@ class SuggestionCard(Gtk.FlowBoxChild):
                                  ellipsize=3, css_classes=["card-title"]))
         content.append(Gtk.Label(label=source, xalign=0, ellipsize=3,
                                  css_classes=["suggestion-source"]))
+        if external_views:
+            content.append(Gtk.Label(
+                label=(f"{compact_count(external_views)} vues · "
+                       f"{compact_count(external_likes)} J’aime"),
+                xalign=0, css_classes=["secondary-text"],
+            ))
         details = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         stars = max(1, min(5, int(round(rating))))
+        tooltip = f"Note calculée sur les interactions · confiance {confidence * 100:.0f} %"
+        if external_views:
+            tooltip = ("Note publique : 60 % portée des vues et 40 % taux de J’aime · "
+                       f"confiance {confidence * 100:.0f} %")
         rating_label = Gtk.Label(
             label="★" * stars + "☆" * (5 - stars) + f"  {rating:.1f}",
             xalign=0, hexpand=True, css_classes=["suggestion-rating"],
-            tooltip_text=f"Note calculée sur les interactions · confiance {confidence * 100:.0f} %",
+            tooltip_text=tooltip,
         )
         details.append(rating_label)
         favorite = Gtk.Button(icon_name="emblem-favorite-symbolic", tooltip_text="J’aime")
@@ -666,10 +726,12 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             f"{len(recommendations)} résultats classés localement et diversifiés par style."
         )
         missing = []
-        for score, uri, title, source, tags, rating, confidence in recommendations:
+        for (score, uri, title, source, tags, rating, confidence,
+             external_views, external_likes) in recommendations:
             thumbnail = suggestion_thumbnail_path(uri)
             card = SuggestionCard(
                 title, source, tags, rating, confidence, thumbnail,
+                external_views, external_likes,
                 lambda _button, target=uri: self.open_suggestion(_button, target),
                 lambda _button, target=uri, label=title: self.favorite_suggestion(target, label),
             )

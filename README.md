@@ -77,6 +77,9 @@ défaut afin que le fil soit utile avant les premières interactions. Le mélang
 une place à chaque site disponible en donnant la priorité au Workshop, puis complète
 selon le score et la diversité ; le
 faible poids initial laisse rapidement place aux goûts réels.
+Deux vidéos populaires de la chaîne YouTube TeshiiSan sont également proposées par
+défaut. Leur note publique combine la portée logarithmique des vues à 60 % et le taux
+de J’aime à 40 % ; les compteurs utilisés sont affichés directement sur chaque carte.
 Les projets Steam de type `Scene` ou `Web` nécessitent Wallpaper Engine/Steam ; les
 éléments de type `Video` ne sont importables que si Steam expose un fichier accessible.
 Le navigateur intégré active par défaut un bloqueur de publicités : règles réseau pour

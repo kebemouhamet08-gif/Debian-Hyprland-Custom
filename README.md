@@ -1,5 +1,42 @@
 # Debian Hyprland Custom
 
+## v2 — Debian Immersive avec Caelestia
+
+La v2 remplace la barre Waybar par [Caelestia Shell](https://github.com/caelestia-dots/shell),
+une interface Quickshell fluide avec lanceur, tableau de bord, visualiseur audio,
+fond dynamique et panneaux translucides. La configuration v1 « Debian Glass »
+reste disponible et n'est pas supprimée.
+
+### Prérequis v2
+
+- une session Hyprland fonctionnelle ;
+- `caelestia-cli` ;
+- la version **git** de Quickshell (`qs`) ;
+- les dépendances Caelestia (`ddcutil`, `brightnessctl`, `libcava`,
+  NetworkManager, `lm-sensors`, Fish, Aubio, PipeWire, Qt 6, polices Material
+  Symbols et Caskaydia Cove Nerd Font).
+
+Caelestia est principalement empaqueté pour Arch et Nix. Sous Debian, compilez
+Quickshell git et Caelestia selon leurs documentations officielles ;
+`install-v2.sh` s'arrête proprement si les deux commandes indispensables ne sont
+pas disponibles.
+
+```bash
+chmod +x install-v2.sh
+./install-v2.sh
+```
+
+L'installateur sauvegarde les fichiers concernés dans
+`~/.config/debian-immersive-v2-backup-*`, pose le profil dans
+`~/.config/caelestia/shell.json` et ajoute un unique `source` à Hyprland.
+
+Raccourcis principaux : `Super+Espace` lanceur, `Super+D` tableau de bord,
+`Super+N` panneau latéral, `Super+M` utilitaires, `Super+L` verrouillage et
+`Ctrl+Alt+Suppr` menu de session. Le fond d'écran est lu depuis
+`~/Pictures/Wallpapers`.
+
+## v1 — Debian Glass / Waybar
+
 Une surcouche réutilisable pour les dotfiles
 [KooL Hyprland](https://github.com/JaKooLit/Hyprland-Dots), pensée pour Debian.
 

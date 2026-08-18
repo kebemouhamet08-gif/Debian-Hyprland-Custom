@@ -1,0 +1,119 @@
+{
+  "appearance": {
+    "deformScale": 1.08,
+    "font": {
+      "scale": 1.15
+    },
+    "rounding": {
+      "scale": 1.15
+    },
+    "spacing": {
+      "scale": 1.05
+    },
+    "padding": {
+      "scale": 1.05
+    },
+    "anim": {
+      "durations": {
+        "scale": 1.12
+      }
+    },
+    "transparency": {
+      "enabled": true,
+      "base": 0.72,
+      "layers": 0.38
+    }
+  },
+  "general": {
+    "showOverFullscreen": false,
+    "logo": "/usr/share/icons/hicolor/scalable/emblems/emblem-debian.svg",
+    "apps": {
+      "terminal": ["kitty"],
+      "audio": ["pavucontrol"],
+      "playback": ["mpv"],
+      "explorer": ["thunar"]
+    }
+  },
+  "background": {
+    "enabled": true,
+    "wallpaperEnabled": true,
+    "desktopClock": {
+      "enabled": true,
+      "scale": 1.08,
+      "position": "bottom-right",
+      "invertColors": false,
+      "background": {
+        "enabled": true,
+        "opacity": 0.34,
+        "blur": true
+      },
+      "shadow": {
+        "enabled": true,
+        "opacity": 0.62,
+        "blur": 0.5
+      }
+    },
+    "visualiser": {
+      "enabled": true,
+      "autoHide": true,
+      "blur": true,
+      "rounding": 1.2,
+      "spacing": 1.05
+    }
+  },
+  "bar": {
+    "persistent": true,
+    "showOnHover": true,
+    "workspaces": {
+      "shown": 7,
+      "activeIndicator": true,
+      "occupiedBg": true,
+      "showWindows": true,
+      "activeTrail": true,
+      "perMonitorWorkspaces": true
+    },
+    "activeWindow": {
+      "compact": false,
+      "inverted": false,
+      "showOnHover": true
+    },
+    "clock": {
+      "background": false,
+      "showDate": true,
+      "showIcon": true
+    }
+  },
+  "border": {
+    "thickness": 8,
+    "rounding": 24,
+    "smoothing": 18
+  },
+  "dashboard": {
+    "enabled": true,
+    "showOnHover": true,
+    "showDashboard": true,
+    "showMedia": true,
+    "showPerformance": true,
+    "showWeather": true
+  },
+  "launcher": {
+    "enabled": true,
+    "showOnHover": false,
+    "maxShown": 8,
+    "maxWallpapers": 12,
+    "vimKeybinds": false,
+    "enableDangerousActions": false,
+    "favouriteApps": ["firefox", "kitty", "thunar"]
+  },
+  "paths": {
+    "wallpaperDir": "~/Pictures/Wallpapers"
+  },
+  "services": {
+    "useTwelveHourClock": false,
+    "visualiserBars": 48,
+    "audioIncrement": 5,
+    "brightnessIncrement": 5,
+    "maxVolume": 120,
+    "smartScheme": true
+  }
+}

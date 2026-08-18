@@ -1,0 +1,49 @@
+--- /usr/share/sddm/themes/simple_sddm_2/Main.qml
++++ /usr/share/sddm/themes/simple_sddm_2/Main.qml
+@@ -1399,5 +1399,8 @@
+ 
+                 model:
+                     sessionModel
++
++                textRole:
++                    "name"
+ 
+                 currentIndex:
+                     sessionModel.lastIndex
+@@ -1432,5 +1435,35 @@
+                             Text.AlignVCenter
+                     }
+ 
++                delegate:
++                    ItemDelegate {
++
++                        width:
++                            sessionCombo.width
++
++                        contentItem:
++                            Text {
++                                text:
++                                    model.name
++
++                                color:
++                                    "white"
++
++                                font.family:
++                                    "sans-serif"
++
++                                font.pixelSize:
++                                    14
++
++                                verticalAlignment:
++                                    Text.AlignVCenter
++                            }
++
++                        background:
++                            Rectangle {
++                                color:
++                                    parent.highlighted ? "#66555555" : "#EE181818"
++                            }
++                    }
++
+                 background:
+                     Rectangle {

@@ -1,0 +1,11 @@
+--- /usr/share/sddm/themes/simple_sddm_2/Main.qml
++++ /usr/share/sddm/themes/simple_sddm_2/Main.qml
+@@ -101,7 +101,7 @@
+ 
+         anchors.fill: parent
+ 
+-        source: "file:///home/mouhamet/Pictures/wallpapers/Gemini_Generated_Image_o54hveo54hveo54h.jpeg"
++        source: "login-background.jpeg"
+ 
+         fillMode: Image.PreserveAspectCrop
+ 

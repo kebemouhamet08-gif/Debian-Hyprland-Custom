@@ -54,6 +54,13 @@ Le raccourci de verrouillage privilégie `/usr/bin/hyprlock`, fourni par le paqu
 Debian et intégré à PAM. Cela évite qu'une compilation installée dans
 `/usr/local/bin` masque la version du système et refuse un mot de passe valide.
 
+### Profil d'affichage OLED
+
+Le profil v2 applique au démarrage une température neutre de 6500 K et un gamma
+prononcé de 70 % avec `hyprsunset`. Le raccourci `Super+Shift+O` bascule entre ce
+rendu plus sombre et les couleurs neutres. Les valeurs peuvent être ajustées avec
+`CAELESTIA_DISPLAY_GAMMA` et `CAELESTIA_DISPLAY_TEMPERATURE`.
+
 ## v1 — Debian Glass / Waybar
 
 Une surcouche réutilisable pour les dotfiles
@@ -96,6 +103,8 @@ fichiers. Déconnectez-vous puis reconnectez-vous si Waybar ne se recharge pas.
 
 - Projet et dotfiles originaux : [@JaKooLit](https://github.com/JaKooLit)
 - Personnalisation Debian : [@kebemouhamet08-gif](https://github.com/kebemouhamet08-gif)
+- Dédicace aux communautés Debian, Hyprland et Caelestia, dont le travail rend
+  cette configuration possible.
 
 Ce dépôt redistribue des éléments adaptés du projet original sous GNU GPL v3.
 Consultez [LICENSE.md](LICENSE.md).

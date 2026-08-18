@@ -31,7 +31,8 @@ mkdir -p "$backup_dir" "$caelestia_dir" "$hypr_dir/scripts"
 
 for path in "$caelestia_dir/shell.json" "$hypr_dir/caelestia-v2.conf" \
     "$hypr_dir/scripts/caelestia-v2-launch.sh" \
-    "$hypr_dir/scripts/caelestia-v2-lock.sh" "$hypr_main"; do
+    "$hypr_dir/scripts/caelestia-v2-lock.sh" \
+    "$hypr_dir/scripts/caelestia-v2-display-profile.sh" "$hypr_main"; do
     if [ -e "$path" ] || [ -L "$path" ]; then
         cp -a --parents "$path" "$backup_dir/"
     fi
@@ -43,6 +44,8 @@ install -m 0755 "$repo_dir/config/hypr/scripts/caelestia-v2-launch.sh" \
     "$hypr_dir/scripts/caelestia-v2-launch.sh"
 install -m 0755 "$repo_dir/config/hypr/scripts/caelestia-v2-lock.sh" \
     "$hypr_dir/scripts/caelestia-v2-lock.sh"
+install -m 0755 "$repo_dir/config/hypr/scripts/caelestia-v2-display-profile.sh" \
+    "$hypr_dir/scripts/caelestia-v2-display-profile.sh"
 
 if [ ! -f "$hypr_main" ]; then
     printf '%s\n' "$source_line" >"$hypr_main"

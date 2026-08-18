@@ -74,9 +74,16 @@ def page_download_url(uri):
 
 def load_config():
     try:
-        return {**DEFAULT_CONFIG, **json.loads(CONFIG_FILE.read_text(encoding="utf-8"))}
+        config = {**DEFAULT_CONFIG, **json.loads(CONFIG_FILE.read_text(encoding="utf-8"))}
     except (OSError, json.JSONDecodeError):
-        return dict(DEFAULT_CONFIG)
+        config = dict(DEFAULT_CONFIG)
+    if "assignments" not in config:
+        config["assignments"] = {}
+        if config["wallpaper"]:
+            config["assignments"][config["output"]] = {
+                key: config[key] for key in DEFAULT_CONFIG if key != "output"
+            }
+    return config
 
 
 def save_config(config):
@@ -201,6 +208,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.output = Gtk.DropDown.new_from_strings(outputs)
         current_output = self.config["output"]
         self.output.set_selected(self.output_names.index(current_output) if current_output in self.output_names else 0)
+        self.output.connect("notify::selected", self.output_changed)
         output_box.append(self.output)
         inspector.append(output_box)
 
@@ -368,7 +376,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         while destination.exists():
             destination = LIBRARY_DIR / f"{Path(name).stem}-{counter}{Path(name).suffix}"
             counter += 1
-        download.set_destination(destination.as_uri())
+        download.set_destination(str(destination))
         self.download_status.set_text(f"Téléchargement : {destination.name}")
         return True
 
@@ -377,8 +385,8 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.download_status.set_text(f"Téléchargement en cours : {progress} %")
 
     def download_finished(self, download):
-        destination = Gio.File.new_for_uri(download.get_destination()).get_path()
-        self.download_status.set_text(f"Ajouté à la bibliothèque : {Path(destination).name}")
+        destination = Path(download.get_destination())
+        self.download_status.set_text(f"Ajouté à la bibliothèque : {destination.name}")
         self.load_library()
 
     def download_failed(self, _download, error):
@@ -455,6 +463,29 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.apply_button.set_sensitive(True)
         self.login_button.set_sensitive(True)
 
+    def output_changed(self, dropdown, _property):
+        output = self.output_names[dropdown.get_selected()]
+        profile = self.config.get("assignments", {}).get(output)
+        if not profile:
+            self.status.set_text(f"Aucun fond attribué à {output}")
+            return
+        wallpaper = Path(profile.get("wallpaper", ""))
+        self.selected = wallpaper if wallpaper.is_file() else None
+        self.selected_label.set_text(wallpaper.name if self.selected else "Sélectionnez une vidéo")
+        self.volume.set_value(profile.get("volume", 0))
+        speed = float(profile.get("speed", 1.0))
+        self.speed.set_selected(self.speeds.index(speed) if speed in self.speeds else 2)
+        self.loop[1].set_active(profile.get("loop", True))
+        self.hardware[1].set_active(profile.get("hardware_decode", True))
+        self.auto_pause[1].set_active(profile.get("auto_pause", True))
+        self.autostart[1].set_active(profile.get("autostart", True))
+        self.apply_button.set_sensitive(self.selected is not None)
+        self.login_button.set_sensitive(self.selected is not None)
+        for card in self.cards:
+            if self.selected and card.path.resolve() == self.selected.resolve():
+                self.flow.select_child(card)
+                break
+
     def import_videos(self, _button):
         dialog = Gtk.FileDialog(title="Importer des fonds vidéo", modal=True)
         video_filter = Gtk.FileFilter(name="Vidéos")
@@ -502,7 +533,15 @@ class MPVpaperWindow(Adw.ApplicationWindow):
     def apply_wallpaper(self, _button):
         if not self.selected:
             return
-        self.config = self.current_config()
+        profile = self.current_config()
+        output = profile["output"]
+        assignments = self.config.setdefault("assignments", {})
+        if output == "*":
+            assignments.clear()
+        else:
+            assignments.pop("*", None)
+        assignments[output] = {key: value for key, value in profile.items() if key != "output"}
+        self.config.update(profile)
         save_config(self.config)
         self.apply_button.set_sensitive(False)
         self.status.set_text("Application du fond vidéo…")
@@ -563,7 +602,12 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         return False
 
     def status_finished(self, _action, result):
-        self.status.set_text("Service actif" if result.stdout.strip() == "active" else "Aucun fond vidéo actif")
+        state = result.stdout.strip()
+        if state.startswith("active:"):
+            count = state.partition(":")[2]
+            self.status.set_text(f"Fonds actifs sur {count} écran(s)")
+        else:
+            self.status.set_text("Aucun fond vidéo actif")
 
 
 class MPVpaperApplication(Adw.Application):

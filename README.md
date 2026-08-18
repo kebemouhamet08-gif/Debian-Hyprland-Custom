@@ -83,6 +83,9 @@ MPVpaper Engine et un second clic ferme sa fenêtre.
 
 Les vidéos importées sont conservées dans `~/Pictures/Wallpapers/Live`. Le dernier
 fond peut être restauré automatiquement à l'ouverture de la session Hyprland.
+Chaque écran peut conserver un fond et des réglages différents : appliquer un fond
+à `eDP-1` ne redémarre plus celui de `HDMI-A-1`. Le choix **Tous les écrans** remplace
+volontairement les affectations individuelles par un fond commun.
 Le raccourci `Super+W` reste réservé au sélecteur standard de fonds d'écran fixes.
 Le bouton **Utiliser pour l'écran de connexion** extrait une image de la vidéo
 sélectionnée, ouvre un terminal d'autorisation et l'installe dans le thème SDDM

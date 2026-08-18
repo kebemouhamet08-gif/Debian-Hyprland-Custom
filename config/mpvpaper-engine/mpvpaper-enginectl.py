@@ -7,11 +7,13 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import re
 
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "mpvpaper-engine"
 CONFIG_FILE = CONFIG_DIR / "config.json"
-UNIT = "mpvpaper-engine-wallpaper.service"
+UNIT_PREFIX = "mpvpaper-engine-wallpaper"
+LEGACY_UNIT = f"{UNIT_PREFIX}.service"
 DEFAULT_CONFIG = {
     "wallpaper": "",
     "output": "*",
@@ -29,7 +31,14 @@ def load_config():
         data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         data = {}
-    return {**DEFAULT_CONFIG, **data}
+    config = {**DEFAULT_CONFIG, **data}
+    if "assignments" not in config:
+        config["assignments"] = {}
+        if config["wallpaper"]:
+            config["assignments"][config["output"]] = {
+                key: config[key] for key in DEFAULT_CONFIG if key != "output"
+            }
+    return config
 
 
 def save_config(config):
@@ -46,8 +55,17 @@ def run(command, check=False):
     return subprocess.run(command, check=check)
 
 
-def stop():
-    run(["systemctl", "--user", "stop", UNIT])
+def unit_for_output(output):
+    suffix = "all" if output == "*" else re.sub(r"[^A-Za-z0-9_.-]", "-", output)
+    return f"{UNIT_PREFIX}-{suffix}.service"
+
+
+def stop(output=None):
+    if output is not None:
+        run(["systemctl", "--user", "stop", unit_for_output(output)])
+        return
+    run(["systemctl", "--user", "stop", f"{UNIT_PREFIX}-*.service"])
+    run(["systemctl", "--user", "stop", LEGACY_UNIT])
     run(["pkill", "-x", "mpvpaper"])
 
 
@@ -71,14 +89,20 @@ def play(config):
     if not shutil.which("mpvpaper"):
         raise SystemExit("mpvpaper n'est pas installé")
 
-    stop()
+    if config["output"] == "*":
+        stop()
+    else:
+        stop(config["output"])
+        stop("*")
+        run(["systemctl", "--user", "stop", LEGACY_UNIT])
     run(["pkill", "-x", "swww-daemon"])
     command = ["mpvpaper"]
     if config["auto_pause"]:
         command.extend(["--auto-pause", "--auto-mode", "full"])
     command.extend(["--mpv-options", mpv_options(config), config["output"], str(wallpaper)])
     run([
-        "systemd-run", "--user", "--quiet", "--collect", f"--unit={UNIT}",
+        "systemd-run", "--user", "--quiet", "--collect",
+        f"--unit={unit_for_output(config['output'])}",
         *command,
     ], check=True)
 
@@ -94,15 +118,25 @@ def main():
     elif args.action == "stop":
         stop()
     elif args.action == "restore":
-        if config["autostart"] and config["wallpaper"]:
-            play(config)
+        assignments = config.get("assignments", {})
+        if "*" in assignments:
+            profile = {**DEFAULT_CONFIG, **assignments["*"], "output": "*"}
+            if profile["autostart"] and profile["wallpaper"]:
+                play(profile)
+        else:
+            for output, assignment in assignments.items():
+                profile = {**DEFAULT_CONFIG, **assignment, "output": output}
+                if profile["autostart"] and profile["wallpaper"]:
+                    play(profile)
     else:
         result = subprocess.run(
-            ["systemctl", "--user", "is-active", UNIT],
+            ["systemctl", "--user", "list-units", f"{UNIT_PREFIX}-*.service",
+             "--state=active", "--no-legend"],
             capture_output=True, text=True, check=False,
         )
-        print(result.stdout.strip() or "inactive")
-        return result.returncode
+        count = len([line for line in result.stdout.splitlines() if line.strip()])
+        print(f"active:{count}" if count else "inactive")
+        return 0 if count else 3
     return 0
 
 

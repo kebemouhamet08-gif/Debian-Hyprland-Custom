@@ -69,6 +69,9 @@ automatique en plein écran. L'onglet **Découvrir** intègre MotionBGS, MoeWall
 VSThemes avec navigation et téléchargement direct dans la bibliothèque, grâce à
 WebKitGTK 6.0. Les liens ouverts dans une nouvelle fenêtre restent dans l'application
 et le bouton de téléchargement utilise `yt-dlp` pour extraire la vidéo de la page.
+L'onglet **Suggestions** utilise un graphe d'affinité SQLite local inspiré de Pinterest :
+les visites, téléchargements et applications renforcent les tags correspondants,
+puis les résultats sont classés et diversifiés à la demande, sans démon d'analyse.
 Installez-la puis ouvrez-la depuis le menu des
 applications ou avec le bouton **Fond d'écran** situé en bas de l'écran :
 

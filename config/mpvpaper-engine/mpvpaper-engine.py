@@ -5,10 +5,14 @@ from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
+import re
 import shutil
+import sqlite3
 import subprocess
 import threading
+import time
 from urllib.parse import quote_plus, urljoin
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 import gi
@@ -25,6 +29,7 @@ CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / 
 CONFIG_FILE = CONFIG_DIR / "config.json"
 CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "mpvpaper-engine" / "thumbnails"
 METADATA_FILE = CACHE_DIR.parent / "metadata.json"
+TASTE_DB = CONFIG_DIR / "suggestions.db"
 LIBRARY_DIR = Path.home() / "Pictures" / "Wallpapers" / "Live"
 LEGACY_LIBRARY_DIR = Path.home() / "Pictures" / "wallpapers"
 CONTROLLER = Path.home() / ".local" / "lib" / "mpvpaper-engine" / "mpvpaper-enginectl.py"
@@ -38,6 +43,100 @@ WALLPAPER_SOURCES = {
     "MoeWalls": "https://moewalls.com/",
     "VSThemes": "https://vsthemes.org/en/wallpapers/page/4/",
 }
+TAG_STOPWORDS = {
+    "wallpaper", "live", "animated", "background", "video", "fond", "ecran",
+    "the", "and", "for", "with", "from", "page", "https", "www", "com",
+    "motionbgs", "moewalls", "vsthemes", "html", "en",
+}
+
+
+def content_tags(*values):
+    words = re.findall(r"[a-z0-9]+", " ".join(values).casefold())
+    return sorted({word for word in words if len(word) > 2 and word not in TAG_STOPWORDS})[:16]
+
+
+class TasteStore:
+    def __init__(self, path=TASTE_DB):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.connection = sqlite3.connect(path)
+        self.connection.execute("PRAGMA journal_mode=WAL")
+        self.connection.execute("PRAGMA cache_size=-2000")
+        self.connection.executescript("""
+            CREATE TABLE IF NOT EXISTS candidates (
+                uri TEXT PRIMARY KEY, title TEXT NOT NULL, source TEXT NOT NULL,
+                tags TEXT NOT NULL, score REAL NOT NULL DEFAULT 0,
+                views INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS tag_profile (
+                tag TEXT PRIMARY KEY, weight REAL NOT NULL DEFAULT 0
+            );
+        """)
+        self.connection.executemany(
+            "DELETE FROM candidates WHERE uri = ?",
+            ((uri,) for uri in WALLPAPER_SOURCES.values()),
+        )
+        self.connection.commit()
+
+    def record(self, uri, title, weight, candidate=None):
+        if not uri or not title or not uri.startswith(("http://", "https://")):
+            return
+        if candidate is None:
+            lowered = title.casefold()
+            candidate = "wallpaper" in lowered and "wallpapers" not in lowered
+        if not candidate:
+            self.reinforce(title, weight * 0.3)
+            return
+        source = urlparse(uri).netloc.removeprefix("www.") or "web"
+        tags = content_tags(title, uri)
+        now = int(time.time())
+        self.connection.execute(
+            """INSERT INTO candidates(uri,title,source,tags,score,views,last_seen)
+               VALUES(?,?,?,?,?,1,?)
+               ON CONFLICT(uri) DO UPDATE SET title=excluded.title, tags=excluded.tags,
+               score=candidates.score+excluded.score, views=candidates.views+1,
+               last_seen=excluded.last_seen""",
+            (uri, title[:240], source, " ".join(tags), weight, now),
+        )
+        for tag in tags:
+            self.connection.execute(
+                """INSERT INTO tag_profile(tag,weight) VALUES(?,?)
+                   ON CONFLICT(tag) DO UPDATE SET weight=tag_profile.weight+excluded.weight""",
+                (tag, weight),
+            )
+        self.connection.commit()
+
+    def reinforce(self, title, weight):
+        for tag in content_tags(title):
+            self.connection.execute(
+                """INSERT INTO tag_profile(tag,weight) VALUES(?,?)
+                   ON CONFLICT(tag) DO UPDATE SET weight=tag_profile.weight+excluded.weight""",
+                (tag, weight),
+            )
+        self.connection.commit()
+
+    def recommendations(self, limit=20):
+        profile = dict(self.connection.execute("SELECT tag,weight FROM tag_profile"))
+        rows = self.connection.execute(
+            "SELECT uri,title,source,tags,score,views,last_seen FROM candidates LIMIT 200"
+        ).fetchall()
+        scored = []
+        for uri, title, source, tags_text, score, views, last_seen in rows:
+            tags = tags_text.split()
+            affinity = sum(profile.get(tag, 0.0) for tag in tags)
+            freshness = min(1.0, max(0.0, (time.time() - last_seen) / 604800))
+            total = score * 0.5 + affinity * 0.3 + freshness * 0.2 - views * 0.05
+            scored.append((total, uri, title, source, tags))
+        scored.sort(reverse=True)
+        result, source_counts = [], {}
+        for item in scored:
+            source = item[3]
+            if source_counts.get(source, 0) >= 3:
+                continue
+            result.append(item)
+            source_counts[source] = source_counts.get(source, 0) + 1
+            if len(result) == limit:
+                break
+        return result
 
 
 class DownloadLinkParser(HTMLParser):
@@ -151,6 +250,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.set_size_request(760, 520)
         self.config = load_config()
         self.metadata = self.load_metadata()
+        self.taste = TasteStore()
         self.selected = Path(self.config["wallpaper"]) if self.config["wallpaper"] else None
         self.cards = []
         LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
@@ -253,6 +353,8 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.views = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
         self.views.add_titled(paned, "library", "Bibliothèque")
         self.views.add_titled(self.build_discover_view(), "discover", "Découvrir")
+        self.views.add_titled(self.build_suggestions_view(), "suggestions", "Suggestions")
+        self.views.connect("notify::visible-child-name", self.view_changed)
         switcher = Gtk.StackSwitcher(stack=self.views)
         header.set_title_widget(switcher)
         toolbar.set_content(self.views)
@@ -301,6 +403,57 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.web_view.load_uri(WALLPAPER_SOURCES[self.source_names[0]])
         return page
 
+    def build_suggestions_view(self):
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
+                       margin_top=16, margin_bottom=16, margin_start=18, margin_end=18)
+        heading = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        heading.append(Gtk.Label(label="Pour vous", xalign=0, hexpand=True,
+                                 css_classes=["title-2"]))
+        refresh = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Recalculer les suggestions")
+        refresh.connect("clicked", lambda _button: self.refresh_suggestions())
+        heading.append(refresh)
+        page.append(heading)
+        self.suggestion_hint = Gtk.Label(
+            label="Les suggestions évoluent avec vos visites, téléchargements et fonds appliqués.",
+            xalign=0, wrap=True, css_classes=["dim-label"],
+        )
+        page.append(self.suggestion_hint)
+        scroll = Gtk.ScrolledWindow(vexpand=True)
+        self.suggestion_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE,
+                                           css_classes=["boxed-list"])
+        scroll.set_child(self.suggestion_list)
+        page.append(scroll)
+        return page
+
+    def view_changed(self, stack, _property):
+        if stack.get_visible_child_name() == "suggestions":
+            self.refresh_suggestions()
+
+    def refresh_suggestions(self):
+        while child := self.suggestion_list.get_first_child():
+            self.suggestion_list.remove(child)
+        recommendations = self.taste.recommendations()
+        if not recommendations:
+            self.suggestion_hint.set_text(
+                "Parcourez quelques fonds dans Découvrir pour initialiser vos suggestions."
+            )
+            return
+        self.suggestion_hint.set_text(
+            f"{len(recommendations)} résultats classés localement et diversifiés par source."
+        )
+        for score, uri, title, source, tags in recommendations:
+            row = Adw.ActionRow(title=title, subtitle=f"{source} · {' · '.join(tags[:3])}")
+            button = Gtk.Button(icon_name="go-next-symbolic", valign=Gtk.Align.CENTER,
+                                tooltip_text="Ouvrir dans Découvrir")
+            button.connect("clicked", self.open_suggestion, uri)
+            row.add_suffix(button)
+            row.set_activatable_widget(button)
+            self.suggestion_list.append(row)
+
+    def open_suggestion(self, _button, uri):
+        self.views.set_visible_child_name("discover")
+        self.web_view.load_uri(uri)
+
     def source_changed(self, dropdown, _property):
         self.web_view.load_uri(WALLPAPER_SOURCES[self.source_names[dropdown.get_selected()]])
 
@@ -321,7 +474,9 @@ class MPVpaperWindow(Adw.ApplicationWindow):
 
     def web_load_changed(self, web_view, event):
         if event == WebKit.LoadEvent.FINISHED:
-            self.download_status.set_text(web_view.get_title() or "Page chargée")
+            title = web_view.get_title() or "Page chargée"
+            self.download_status.set_text(title)
+            self.taste.record(web_view.get_uri(), title, 0.15)
 
     def web_decide_policy(self, _web_view, decision, decision_type):
         if decision_type != WebKit.PolicyDecisionType.NEW_WINDOW_ACTION:
@@ -357,6 +512,8 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             paths = [line for line in result.stdout.splitlines() if line.strip()]
             name = Path(paths[-1]).name if paths else "vidéo"
             self.download_status.set_text(f"Ajouté à la bibliothèque : {name}")
+            self.taste.record(self.web_view.get_uri(), self.web_view.get_title() or name, 2.0,
+                              candidate=True)
             self.load_library()
         else:
             message = result.stderr.strip().splitlines()
@@ -387,6 +544,8 @@ class MPVpaperWindow(Adw.ApplicationWindow):
     def download_finished(self, download):
         destination = Path(download.get_destination())
         self.download_status.set_text(f"Ajouté à la bibliothèque : {destination.name}")
+        self.taste.record(self.web_view.get_uri(), self.web_view.get_title() or destination.name,
+                          2.0, candidate=True)
         self.load_library()
 
     def download_failed(self, _download, error):
@@ -543,6 +702,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         assignments[output] = {key: value for key, value in profile.items() if key != "output"}
         self.config.update(profile)
         save_config(self.config)
+        self.taste.reinforce(self.selected.stem, 3.0)
         self.apply_button.set_sensitive(False)
         self.status.set_text("Application du fond vidéo…")
         self.run_controller("play")

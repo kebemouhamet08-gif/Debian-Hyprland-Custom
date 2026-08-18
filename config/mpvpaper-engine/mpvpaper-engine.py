@@ -124,6 +124,32 @@ def youtube_download_command(uri, height):
     return command
 
 
+def installed_appearance_items(kind):
+    if kind == "gtk":
+        roots = (Path("/usr/share/themes"), Path.home() / ".themes",
+                 Path.home() / ".local/share/themes")
+        markers = ("gtk-3.0", "gtk-4.0")
+    else:
+        roots = (Path("/usr/share/icons"), Path.home() / ".icons",
+                 Path.home() / ".local/share/icons")
+        markers = ("index.theme",) if kind == "icons" else ("cursors",)
+    names = set()
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for item in root.iterdir():
+            if item.is_dir() and any((item / marker).exists() for marker in markers):
+                names.add(item.name)
+    return sorted(names, key=str.casefold)
+
+
+def desktop_interface_setting(key, fallback=""):
+    try:
+        return Gio.Settings.new("org.gnome.desktop.interface").get_string(key)
+    except GLib.Error:
+        return fallback
+
+
 class TasteStore:
     def __init__(self, path=TASTE_DB):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -585,6 +611,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.views.add_titled(paned, "library", "Bibliothèque")
         self.views.add_titled(self.build_discover_view(), "discover", "Découvrir")
         self.views.add_titled(self.build_suggestions_view(), "suggestions", "Suggestions")
+        self.views.add_titled(self.build_themes_view(), "themes", "Thèmes")
         self.views.connect("notify::visible-child-name", self.view_changed)
         switcher = Gtk.StackSwitcher(stack=self.views)
         header.set_title_widget(switcher)
@@ -646,6 +673,95 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         page.append(self.download_status)
         self.web_view.load_uri(WALLPAPER_SOURCES[self.source_names[0]])
         return page
+
+    def theme_dropdown(self, parent, title, values, current):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.append(Gtk.Label(label=title, xalign=0, css_classes=["heading"]))
+        dropdown = Gtk.DropDown.new_from_strings(values)
+        dropdown.set_selected(values.index(current) if current in values else 0)
+        box.append(dropdown)
+        parent.append(box)
+        return dropdown
+
+    def build_themes_view(self):
+        scroll = Gtk.ScrolledWindow(vexpand=True)
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18,
+                       margin_top=22, margin_bottom=22, margin_start=24, margin_end=24)
+        page.set_size_request(520, -1)
+        page.append(Gtk.Label(label="Apparence du bureau", xalign=0,
+                              css_classes=["title-2"]))
+        page.append(Gtk.Label(
+            label="Choisissez les thèmes utilisés par les applications GTK de votre session.",
+            xalign=0, wrap=True, css_classes=["dim-label"],
+        ))
+
+        self.color_modes = ["Clair", "Sombre", "Selon le système"]
+        schemes = {"prefer-light": "Clair", "prefer-dark": "Sombre",
+                   "default": "Selon le système"}
+        current_scheme = schemes.get(
+            desktop_interface_setting("color-scheme", "default"), "Selon le système"
+        )
+        self.theme_color = self.theme_dropdown(
+            page, "Mode de couleur", self.color_modes, current_scheme
+        )
+
+        current_gtk = desktop_interface_setting("gtk-theme", "Adwaita")
+        self.gtk_themes = installed_appearance_items("gtk") or ["Adwaita"]
+        if current_gtk not in self.gtk_themes:
+            self.gtk_themes.insert(0, current_gtk)
+        self.theme_gtk = self.theme_dropdown(
+            page, "Thème GTK", self.gtk_themes, current_gtk,
+        )
+        current_icons = desktop_interface_setting("icon-theme", "Adwaita")
+        self.icon_themes = installed_appearance_items("icons") or ["Adwaita"]
+        if current_icons not in self.icon_themes:
+            self.icon_themes.insert(0, current_icons)
+        self.theme_icons = self.theme_dropdown(
+            page, "Icônes", self.icon_themes, current_icons,
+        )
+        current_cursor = desktop_interface_setting("cursor-theme", "default")
+        self.cursor_themes = installed_appearance_items("cursors") or ["default"]
+        if current_cursor not in self.cursor_themes:
+            self.cursor_themes.insert(0, current_cursor)
+        self.theme_cursor = self.theme_dropdown(
+            page, "Curseur", self.cursor_themes, current_cursor,
+        )
+
+        apply_button = Gtk.Button(label="Appliquer le thème",
+                                  css_classes=["suggested-action"])
+        apply_button.connect("clicked", self.apply_theme)
+        page.append(apply_button)
+        self.theme_status = Gtk.Label(label="", xalign=0, wrap=True,
+                                      css_classes=["dim-label"])
+        page.append(self.theme_status)
+        scroll.set_child(page)
+        return scroll
+
+    def apply_theme(self, _button):
+        settings = Gio.Settings.new("org.gnome.desktop.interface")
+        mode = self.color_modes[self.theme_color.get_selected()]
+        scheme = {"Clair": "prefer-light", "Sombre": "prefer-dark",
+                  "Selon le système": "default"}[mode]
+        values = {
+            "color-scheme": scheme,
+            "gtk-theme": self.gtk_themes[self.theme_gtk.get_selected()],
+            "icon-theme": self.icon_themes[self.theme_icons.get_selected()],
+            "cursor-theme": self.cursor_themes[self.theme_cursor.get_selected()],
+        }
+        try:
+            for key, value in values.items():
+                settings.set_string(key, value)
+            Adw.StyleManager.get_default().set_color_scheme(
+                Adw.ColorScheme.FORCE_DARK if mode == "Sombre"
+                else Adw.ColorScheme.FORCE_LIGHT if mode == "Clair"
+                else Adw.ColorScheme.DEFAULT
+            )
+            self.theme_status.set_text(
+                f"Thème {values['gtk-theme']} appliqué avec les icônes "
+                f"{values['icon-theme']}."
+            )
+        except GLib.Error as error:
+            self.theme_status.set_text(f"Impossible d’appliquer le thème : {error.message}")
 
     def compile_adblock_filter(self):
         rules = [

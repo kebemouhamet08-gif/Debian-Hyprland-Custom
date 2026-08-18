@@ -137,6 +137,12 @@ chmod +x install-mpvpaper-engine.sh
    sélectionnée. Saisissez le mot de passe administrateur dans le terminal qui
    s'ouvre pour l'installer dans SDDM. **Arrêter le fond vidéo** coupe les fonds
    animés en cours sans supprimer les fichiers de la bibliothèque.
+9. Dans **Thèmes**, choisissez le mode clair ou sombre, le thème GTK, les icônes
+   et le curseur parmi ceux installés sur la machine. Cliquez sur **Appliquer le
+   thème** : le réglage est conservé dans la session et utilisé par les
+   applications compatibles. Les nouvelles collections peuvent être installées
+   dans `~/.themes` pour GTK et `~/.icons` pour les icônes ou curseurs ; elles
+   apparaîtront dans les listes au prochain lancement de MPVpaper Engine.
 
 Les miniatures peuvent prendre quelques secondes à apparaître lors de la première
 ouverture. Un téléchargement qui échoue peut provenir d'un site ayant changé son

@@ -20,6 +20,7 @@ VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"}
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "mpvpaper-engine"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "mpvpaper-engine" / "thumbnails"
+METADATA_FILE = CACHE_DIR.parent / "metadata.json"
 LIBRARY_DIR = Path.home() / "Pictures" / "Wallpapers" / "Live"
 LEGACY_LIBRARY_DIR = Path.home() / "Pictures" / "wallpapers"
 CONTROLLER = Path.home() / ".local" / "lib" / "mpvpaper-engine" / "mpvpaper-enginectl.py"
@@ -54,7 +55,7 @@ def monitor_names():
         return []
 
 
-def video_duration(path):
+def probe_video_duration(path):
     try:
         result = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -72,8 +73,13 @@ def thumbnail_path(video):
     return CACHE_DIR / f"{hashlib.sha256(signature.encode()).hexdigest()}.jpg"
 
 
+def metadata_key(video):
+    signature = f"{video.resolve()}:{video.stat().st_mtime_ns}"
+    return hashlib.sha256(signature.encode()).hexdigest()
+
+
 class WallpaperCard(Gtk.FlowBoxChild):
-    def __init__(self, path, thumbnail):
+    def __init__(self, path, thumbnail, duration):
         super().__init__()
         self.path = path
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
@@ -85,7 +91,7 @@ class WallpaperCard(Gtk.FlowBoxChild):
         name = Gtk.Label(label=path.stem, xalign=0, ellipsize=3, max_width_chars=25)
         name.add_css_class("card-title")
         content.append(name)
-        content.append(Gtk.Label(label=video_duration(path), xalign=0, css_classes=["dim-label"]))
+        content.append(Gtk.Label(label=duration, xalign=0, css_classes=["secondary-text"]))
         self.set_child(content)
 
 
@@ -95,6 +101,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.set_default_size(1120, 720)
         self.set_size_request(760, 520)
         self.config = load_config()
+        self.metadata = self.load_metadata()
         self.selected = Path(self.config["wallpaper"]) if self.config["wallpaper"] else None
         self.cards = []
         LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
@@ -130,9 +137,10 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.search.connect("search-changed", self.filter_library)
         library.append(self.search)
         scroll = Gtk.ScrolledWindow(vexpand=True)
-        self.flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.SINGLE, homogeneous=True,
+        self.flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.SINGLE, homogeneous=False,
                                 column_spacing=12, row_spacing=12, min_children_per_line=2,
                                 max_children_per_line=3)
+        self.flow.set_valign(Gtk.Align.START)
         self.flow.connect("selected-children-changed", self.selection_changed)
         scroll.set_child(self.flow)
         library.append(scroll)
@@ -209,6 +217,18 @@ class MPVpaperWindow(Adw.ApplicationWindow):
                 )
         return sorted(videos, key=lambda path: path.name.lower())
 
+    def load_metadata(self):
+        try:
+            return json.loads(METADATA_FILE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def save_metadata(self):
+        METADATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+        temporary = METADATA_FILE.with_suffix(".tmp")
+        temporary.write_text(json.dumps(self.metadata, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(METADATA_FILE)
+
     def load_library(self):
         while child := self.flow.get_first_child():
             self.flow.remove(child)
@@ -216,20 +236,25 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         missing = []
         for video in self.videos():
             thumb = thumbnail_path(video)
-            card = WallpaperCard(video, thumb)
+            key = metadata_key(video)
+            card = WallpaperCard(video, thumb, self.metadata.get(key, "Analyse en cours…"))
             self.cards.append(card)
             self.flow.append(card)
-            if not thumb.exists():
-                missing.append((video, thumb))
+            if not thumb.exists() or key not in self.metadata:
+                missing.append((video, thumb, key))
             if self.selected and video.resolve() == self.selected.expanduser().resolve():
                 self.flow.select_child(card)
         if missing:
             threading.Thread(target=self.generate_thumbnails, args=(missing,), daemon=True).start()
 
     def generate_thumbnails(self, items):
-        for video, thumb in items:
-            subprocess.run(["ffmpegthumbnailer", "-i", str(video), "-o", str(thumb), "-s", "480", "-t", "20"],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        for video, thumb, key in items:
+            if not thumb.exists():
+                subprocess.run(["ffmpegthumbnailer", "-i", str(video), "-o", str(thumb), "-s", "480", "-t", "20"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            if key not in self.metadata:
+                self.metadata[key] = probe_video_duration(video)
+        self.save_metadata()
         GLib.idle_add(self.load_library)
 
     def filter_library(self, entry):
@@ -326,8 +351,13 @@ class MPVpaperApplication(Adw.Application):
         Adw.Application.do_startup(self)
         css = Gtk.CssProvider()
         css.load_from_string("""
-            window { background: #111216; }
-            headerbar { background: #17191f; }
+            window { background: #111216; color: #f5f6f8; }
+            headerbar { background: #17191f; color: #f5f6f8; }
+            label { color: #f5f6f8; }
+            label.dim-label, label.secondary-text, .subtitle { color: #c8ccd6; }
+            entry, searchentry, dropdown, button { color: #f5f6f8; }
+            entry, searchentry, dropdown { background: #292c34; }
+            actionrow { color: #f5f6f8; }
             .wallpaper-card { padding: 8px; border-radius: 6px; background: #1b1e25; border: 1px solid #30343e; }
             .wallpaper-card:hover { background: #242832; border-color: #e23864; }
             flowboxchild:selected .wallpaper-card { background: #302028; border-color: #ff5277; }

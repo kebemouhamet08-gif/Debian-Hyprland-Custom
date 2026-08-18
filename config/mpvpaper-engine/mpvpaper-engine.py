@@ -45,13 +45,18 @@ WALLPAPER_SOURCES = {
     "VSThemes": "https://vsthemes.org/en/wallpapers/page/4/",
 }
 DEFAULT_SUGGESTIONS = (
-    ("https://motionbgs.com/brain-interface", "Brain Interface Live Wallpaper", "technology sci-fi minimal"),
-    ("https://motionbgs.com/cyberpunk-tokyo-city", "Cyberpunk Tokyo City Live Wallpaper", "cyberpunk city games"),
-    ("https://motionbgs.com/chihiro-spirited-away", "Chihiro Spirited Away Live Wallpaper", "anime fantasy"),
-    ("https://motionbgs.com/frieren-minimal-art", "Frieren Minimal Art Live Wallpaper", "anime minimal black white"),
-    ("https://motionbgs.com/bmw-m4-black", "BMW M4 Black Live Wallpaper", "car bmw dark"),
-    ("https://motionbgs.com/summer-mountain-paradise", "Summer Mountain Paradise Live Wallpaper", "nature mountain landscape"),
-    ("https://motionbgs.com/edge-of-the-universe", "Edge of the Universe Live Wallpaper", "space universe sci-fi"),
+    ("https://motionbgs.com/brain-interface", "Brain Interface Live Wallpaper", "motionbgs.com", "technology sci-fi minimal"),
+    ("https://motionbgs.com/cyberpunk-tokyo-city", "Cyberpunk Tokyo City Live Wallpaper", "motionbgs.com", "cyberpunk city games"),
+    ("https://motionbgs.com/chihiro-spirited-away", "Chihiro Spirited Away Live Wallpaper", "motionbgs.com", "anime fantasy"),
+    ("https://motionbgs.com/frieren-minimal-art", "Frieren Minimal Art Live Wallpaper", "motionbgs.com", "anime minimal black white"),
+    ("https://motionbgs.com/bmw-m4-black", "BMW M4 Black Live Wallpaper", "motionbgs.com", "car bmw dark"),
+    ("https://motionbgs.com/summer-mountain-paradise", "Summer Mountain Paradise Live Wallpaper", "motionbgs.com", "nature mountain landscape"),
+    ("https://motionbgs.com/edge-of-the-universe", "Edge of the Universe Live Wallpaper", "motionbgs.com", "space universe sci-fi"),
+    ("https://moewalls.com/lifestyle/lofi-house-cloudy-day-live-wallpaper/", "Lofi House Cloudy Day Live Wallpaper", "moewalls.com", "lofi landscape peaceful"),
+    ("https://moewalls.com/anime/flowers-water-stream-ghibli-live-wallpaper/", "Flowers Water Stream Ghibli Live Wallpaper", "moewalls.com", "anime nature ghibli"),
+    ("https://moewalls.com/lifestyle/chillout-beach-live-wallpaper/", "Chillout Beach Live Wallpaper", "moewalls.com", "beach water tropical"),
+    ("https://vsthemes.org/en/wallpapers/page/4/", "Sélection animée VSThemes - page 4", "vsthemes.org", "collection animated discovery"),
+    ("https://vsthemes.org/en/wallpapers/", "Nouveautés animées VSThemes", "vsthemes.org", "collection new discovery"),
 )
 TAG_STOPWORDS = {
     "wallpaper", "live", "animated", "background", "video", "fond", "ecran",
@@ -88,7 +93,7 @@ class TasteStore:
         self.connection.executemany(
             """INSERT OR IGNORE INTO candidates
                (uri,title,source,tags,score,views,last_seen)
-               VALUES(?,?,'motionbgs.com',?,0.1,0,0)""",
+               VALUES(?,?,?,?,0.1,0,0)""",
             DEFAULT_SUGGESTIONS,
         )
         self.connection.commit()
@@ -143,8 +148,20 @@ class TasteStore:
             total = score * 0.5 + affinity * 0.3 + freshness * 0.2 - views * 0.05
             scored.append((total, uri, title, source, tags))
         scored.sort(reverse=True)
-        result, category_counts = [], {}
+        result, selected_uris = [], set()
+        best_by_source = {}
         for item in scored:
+            best_by_source.setdefault(item[3], item)
+        for item in best_by_source.values():
+            result.append(item)
+            selected_uris.add(item[1])
+            if len(result) == limit:
+                return result
+
+        category_counts = {}
+        for item in scored:
+            if item[1] in selected_uris:
+                continue
             category = item[4][0] if item[4] else item[3]
             if category_counts.get(category, 0) >= 3:
                 continue

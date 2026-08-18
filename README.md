@@ -72,8 +72,10 @@ et le bouton de téléchargement utilise `yt-dlp` pour extraire la vidéo de la 
 L'onglet **Suggestions** utilise un graphe d'affinité SQLite local inspiré de Pinterest :
 les visites, téléchargements et applications renforcent les tags correspondants,
 puis les résultats sont classés et diversifiés à la demande, sans démon d'analyse.
-Sept propositions variées sont fournies par défaut afin que le fil soit utile avant
-les premières interactions ; leur faible poids laisse rapidement place aux goûts réels.
+Des propositions variées issues de MotionBGS, MoeWalls et VSThemes sont fournies par
+défaut afin que le fil soit utile avant les premières interactions. Le mélange réserve
+une place à chaque site disponible, puis complète selon le score et la diversité ; le
+faible poids initial laisse rapidement place aux goûts réels.
 Le fil utilise des cartes visuelles avec grande miniature mise en cache, titre, source,
 note, tags, favori et ouverture directe de la fiche dans **Découvrir**.
 Installez-la puis ouvrez-la depuis le menu des

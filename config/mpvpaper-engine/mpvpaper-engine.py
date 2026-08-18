@@ -68,6 +68,19 @@ SOURCE_PRIORITY = {
     "moewalls.com": 2,
     "vsthemes.org": 3,
 }
+AD_DOMAINS = (
+    "doubleclick.net", "googlesyndication.com", "googleadservices.com",
+    "adservice.google.com", "amazon-adsystem.com", "adnxs.com", "criteo.com",
+    "criteo.net", "taboola.com", "outbrain.com", "popads.net", "popcash.net",
+    "propellerads.com", "exoclick.com", "juicyads.com", "trafficjunky.net",
+)
+ADBLOCK_CSS = """
+    .adsbygoogle, .advertisement, .ad-container, .ad-wrapper, [data-ad-slot],
+    [id^="google_ads"], [id^="div-gpt-ad"], iframe[src*="doubleclick.net"],
+    iframe[src*="googlesyndication.com"], [class*="popup-ad"] {
+        display: none !important; visibility: hidden !important;
+    }
+"""
 TAG_STOPWORDS = {
     "wallpaper", "live", "animated", "background", "video", "fond", "ecran",
     "the", "and", "for", "with", "from", "page", "https", "www", "com",
@@ -518,9 +531,22 @@ class MPVpaperWindow(Adw.ApplicationWindow):
                                      tooltip_text="Télécharger la vidéo de cette page")
         download_button.connect("clicked", self.download_current_page)
         navigation.append(download_button)
+        self.adblock_button = Gtk.ToggleButton(icon_name="security-high-symbolic",
+                                               tooltip_text="Bloqueur de publicités actif")
+        self.adblock_button.set_active(True)
+        self.adblock_button.connect("toggled", self.adblock_toggled)
+        navigation.append(self.adblock_button)
         page.append(navigation)
 
-        self.web_view = WebKit.WebView()
+        self.web_content = WebKit.UserContentManager()
+        self.adblock_style = WebKit.UserStyleSheet.new(
+            ADBLOCK_CSS, WebKit.UserContentInjectedFrames.ALL_FRAMES,
+            WebKit.UserStyleLevel.USER, None, None,
+        )
+        self.adblock_filter = None
+        self.web_content.add_style_sheet(self.adblock_style)
+        self.compile_adblock_filter()
+        self.web_view = WebKit.WebView(user_content_manager=self.web_content)
         self.web_view.set_vexpand(True)
         self.web_view.connect("notify::uri", self.web_uri_changed)
         self.web_view.connect("load-changed", self.web_load_changed)
@@ -534,6 +560,44 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         page.append(self.download_status)
         self.web_view.load_uri(WALLPAPER_SOURCES[self.source_names[0]])
         return page
+
+    def compile_adblock_filter(self):
+        rules = [
+            {
+                "trigger": {"url-filter": f".*{domain.replace('.', r'\.')}.*"},
+                "action": {"type": "block"},
+            }
+            for domain in AD_DOMAINS
+        ]
+        store = WebKit.UserContentFilterStore.new(str(CACHE_DIR.parent / "adblock"))
+        store.save(
+            "mpvpaper-engine-ads", GLib.Bytes.new(json.dumps(rules).encode()),
+            None, self.adblock_filter_ready,
+        )
+
+    def adblock_filter_ready(self, store, result):
+        try:
+            self.adblock_filter = store.save_finish(result)
+        except GLib.Error as error:
+            self.download_status.set_text(f"Bloqueur réseau indisponible : {error.message}")
+            return
+        if self.adblock_button.get_active():
+            self.web_content.add_filter(self.adblock_filter)
+            self.web_view.reload()
+
+    def adblock_toggled(self, button):
+        self.web_content.remove_all_filters()
+        self.web_content.remove_all_style_sheets()
+        if button.get_active():
+            self.web_content.add_style_sheet(self.adblock_style)
+            if self.adblock_filter:
+                self.web_content.add_filter(self.adblock_filter)
+            button.set_tooltip_text("Bloqueur de publicités actif")
+            self.download_status.set_text("Protection contre les publicités activée")
+        else:
+            button.set_tooltip_text("Bloqueur de publicités désactivé")
+            self.download_status.set_text("Protection contre les publicités désactivée")
+        self.web_view.reload()
 
     def build_suggestions_view(self):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
@@ -634,7 +698,8 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         if decision_type != WebKit.PolicyDecisionType.NEW_WINDOW_ACTION:
             return False
         action = decision.get_navigation_action()
-        self.web_view.load_uri(action.get_request().get_uri())
+        if action.is_user_gesture():
+            self.web_view.load_uri(action.get_request().get_uri())
         decision.ignore()
         return True
 

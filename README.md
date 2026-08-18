@@ -79,6 +79,10 @@ selon le score et la diversité ; le
 faible poids initial laisse rapidement place aux goûts réels.
 Les projets Steam de type `Scene` ou `Web` nécessitent Wallpaper Engine/Steam ; les
 éléments de type `Video` ne sont importables que si Steam expose un fichier accessible.
+Le navigateur intégré active par défaut un bloqueur de publicités : règles réseau pour
+les régies connues, masquage des emplacements publicitaires et refus des fenêtres
+surgissantes automatiques. Le bouton bouclier permet de désactiver temporairement la
+protection lorsqu'un site en a besoin.
 Le fil utilise des cartes visuelles avec grande miniature mise en cache, titre, source,
 note, tags, favori et ouverture directe de la fiche dans **Découvrir**.
 La note sur 5 est calibrée selon la pertinence et le volume d'interactions : les

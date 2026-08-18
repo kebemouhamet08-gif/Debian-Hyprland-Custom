@@ -30,6 +30,7 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "mpvpaper-engine" / "thumbnails"
 METADATA_FILE = CACHE_DIR.parent / "metadata.json"
 TASTE_DB = CONFIG_DIR / "suggestions.db"
+SUGGESTION_CACHE = CACHE_DIR.parent / "suggestions"
 LIBRARY_DIR = Path.home() / "Pictures" / "Wallpapers" / "Live"
 LEGACY_LIBRARY_DIR = Path.home() / "Pictures" / "wallpapers"
 CONTROLLER = Path.home() / ".local" / "lib" / "mpvpaper-engine" / "mpvpaper-enginectl.py"
@@ -168,6 +169,19 @@ class DownloadLinkParser(HTMLParser):
             self.links.append(href)
 
 
+class PreviewParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.preview = ""
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "meta" or self.preview:
+            return
+        values = dict(attrs)
+        if values.get("property") in ("og:image", "twitter:image"):
+            self.preview = values.get("content", "")
+
+
 def page_download_url(uri):
     try:
         request = Request(uri, headers={"User-Agent": "Mozilla/5.0 MPVpaperEngine/1.0"})
@@ -184,6 +198,26 @@ def page_download_url(uri):
     except (OSError, ValueError):
         pass
     return uri
+
+
+def suggestion_thumbnail_path(uri):
+    return SUGGESTION_CACHE / f"{hashlib.sha256(uri.encode()).hexdigest()}.preview"
+
+
+def fetch_suggestion_thumbnail(uri, destination):
+    try:
+        request = Request(uri, headers={"User-Agent": "Mozilla/5.0 MPVpaperEngine/1.0"})
+        with urlopen(request, timeout=15) as response:
+            parser = PreviewParser()
+            parser.feed(response.read().decode("utf-8", "replace"))
+        if not parser.preview:
+            return False
+        image_request = Request(urljoin(uri, parser.preview), headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(image_request, timeout=15) as response:
+            destination.write_bytes(response.read())
+        return True
+    except (OSError, ValueError):
+        return False
 
 
 def load_config():
@@ -258,6 +292,35 @@ class WallpaperCard(Gtk.FlowBoxChild):
         self.set_child(content)
 
 
+class SuggestionCard(Gtk.FlowBoxChild):
+    def __init__(self, title, source, tags, score, thumbnail, open_callback, favorite_callback):
+        super().__init__()
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
+                          css_classes=["suggestion-card"])
+        picture = Gtk.Picture.new_for_filename(str(thumbnail)) if thumbnail.exists() else Gtk.Picture()
+        picture.set_content_fit(Gtk.ContentFit.COVER)
+        picture.set_size_request(250, 150)
+        content.append(picture)
+        content.append(Gtk.Label(label=title, xalign=0, wrap=True, lines=2,
+                                 ellipsize=3, css_classes=["card-title"]))
+        content.append(Gtk.Label(label=source, xalign=0, ellipsize=3,
+                                 css_classes=["suggestion-source"]))
+        details = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        stars = max(3, min(5, int(round(3 + score))))
+        details.append(Gtk.Label(label="★" * stars + "☆" * (5 - stars), xalign=0,
+                                 hexpand=True, css_classes=["suggestion-rating"]))
+        favorite = Gtk.Button(icon_name="emblem-favorite-symbolic", tooltip_text="J’aime")
+        favorite.connect("clicked", favorite_callback)
+        details.append(favorite)
+        content.append(details)
+        content.append(Gtk.Label(label=" · ".join(tags[:3]), xalign=0, ellipsize=3,
+                                 css_classes=["secondary-text"]))
+        open_button = Gtk.Button(label="Ouvrir", css_classes=["suggested-action"])
+        open_button.connect("clicked", open_callback)
+        content.append(open_button)
+        self.set_child(content)
+
+
 class MPVpaperWindow(Adw.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app, title="MPVpaper Engine")
@@ -266,10 +329,12 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.config = load_config()
         self.metadata = self.load_metadata()
         self.taste = TasteStore()
+        self.suggestion_thumbnail_attempted = set()
         self.selected = Path(self.config["wallpaper"]) if self.config["wallpaper"] else None
         self.cards = []
         LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        SUGGESTION_CACHE.mkdir(parents=True, exist_ok=True)
         self.build_ui()
         self.load_library()
         self.refresh_status()
@@ -434,9 +499,11 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         )
         page.append(self.suggestion_hint)
         scroll = Gtk.ScrolledWindow(vexpand=True)
-        self.suggestion_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE,
-                                           css_classes=["boxed-list"])
-        scroll.set_child(self.suggestion_list)
+        self.suggestion_flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE,
+                                           column_spacing=14, row_spacing=14,
+                                           min_children_per_line=2, max_children_per_line=4)
+        self.suggestion_flow.set_valign(Gtk.Align.START)
+        scroll.set_child(self.suggestion_flow)
         page.append(scroll)
         return page
 
@@ -445,8 +512,8 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             self.refresh_suggestions()
 
     def refresh_suggestions(self):
-        while child := self.suggestion_list.get_first_child():
-            self.suggestion_list.remove(child)
+        while child := self.suggestion_flow.get_first_child():
+            self.suggestion_flow.remove(child)
         recommendations = self.taste.recommendations()
         if not recommendations:
             self.suggestion_hint.set_text(
@@ -454,16 +521,34 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             )
             return
         self.suggestion_hint.set_text(
-            f"{len(recommendations)} résultats classés localement et diversifiés par source."
+            f"{len(recommendations)} résultats classés localement et diversifiés par style."
         )
+        missing = []
         for score, uri, title, source, tags in recommendations:
-            row = Adw.ActionRow(title=title, subtitle=f"{source} · {' · '.join(tags[:3])}")
-            button = Gtk.Button(icon_name="go-next-symbolic", valign=Gtk.Align.CENTER,
-                                tooltip_text="Ouvrir dans Découvrir")
-            button.connect("clicked", self.open_suggestion, uri)
-            row.add_suffix(button)
-            row.set_activatable_widget(button)
-            self.suggestion_list.append(row)
+            thumbnail = suggestion_thumbnail_path(uri)
+            card = SuggestionCard(
+                title, source, tags, score, thumbnail,
+                lambda _button, target=uri: self.open_suggestion(_button, target),
+                lambda _button, label=title: self.favorite_suggestion(label),
+            )
+            self.suggestion_flow.append(card)
+            if not thumbnail.exists() and uri not in self.suggestion_thumbnail_attempted:
+                self.suggestion_thumbnail_attempted.add(uri)
+                missing.append((uri, thumbnail))
+        if missing:
+            threading.Thread(target=self.generate_suggestion_thumbnails,
+                             args=(missing,), daemon=True).start()
+
+    def generate_suggestion_thumbnails(self, items):
+        changed = False
+        for uri, destination in items:
+            changed = fetch_suggestion_thumbnail(uri, destination) or changed
+        if changed:
+            GLib.idle_add(self.refresh_suggestions)
+
+    def favorite_suggestion(self, title):
+        self.taste.reinforce(title, 4.0)
+        self.refresh_suggestions()
 
     def open_suggestion(self, _button, uri):
         self.views.set_visible_child_name("discover")
@@ -804,6 +889,10 @@ class MPVpaperApplication(Adw.Application):
             .wallpaper-card:hover { background: #242832; border-color: #e23864; }
             flowboxchild:selected .wallpaper-card { background: #302028; border-color: #ff5277; }
             .card-title { font-weight: 700; }
+            .suggestion-card { padding: 10px; border-radius: 6px; background: #1b1e25; border: 1px solid #30343e; }
+            .suggestion-card:hover { background: #242832; border-color: #4f8cff; }
+            .suggestion-source { color: #6da2ff; font-weight: 600; }
+            .suggestion-rating { color: #f3c969; }
             picture { border-radius: 4px; background: #090a0d; }
         """)
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)

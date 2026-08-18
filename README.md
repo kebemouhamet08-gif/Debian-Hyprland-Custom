@@ -74,6 +74,8 @@ les visites, téléchargements et applications renforcent les tags correspondant
 puis les résultats sont classés et diversifiés à la demande, sans démon d'analyse.
 Sept propositions variées sont fournies par défaut afin que le fil soit utile avant
 les premières interactions ; leur faible poids laisse rapidement place aux goûts réels.
+Le fil utilise des cartes visuelles avec grande miniature mise en cache, titre, source,
+note, tags, favori et ouverture directe de la fiche dans **Découvrir**.
 Installez-la puis ouvrez-la depuis le menu des
 applications ou avec le bouton **Fond d'écran** situé en bas de l'écran :
 

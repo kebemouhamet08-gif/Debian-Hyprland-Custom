@@ -35,6 +35,7 @@ LIBRARY_DIR = Path.home() / "Pictures" / "Wallpapers" / "Live"
 LEGACY_LIBRARY_DIR = Path.home() / "Pictures" / "wallpapers"
 CONTROLLER = Path.home() / ".local" / "lib" / "mpvpaper-engine" / "mpvpaper-enginectl.py"
 SDDM_INSTALLER = Path.home() / ".local" / "lib" / "mpvpaper-engine" / "install-sddm-background.sh"
+LOCAL_YTDLP = Path.home() / ".local" / "bin" / "yt-dlp"
 DEFAULT_CONFIG = {
     "wallpaper": "", "output": "*", "volume": 0, "speed": 1.0,
     "loop": True, "hardware_decode": True, "auto_pause": True, "autostart": True,
@@ -91,6 +92,27 @@ TAG_STOPWORDS = {
 def content_tags(*values):
     words = re.findall(r"[a-z0-9]+", " ".join(values).casefold())
     return sorted({word for word in words if len(word) > 2 and word not in TAG_STOPWORDS})[:16]
+
+
+def is_youtube_url(value):
+    try:
+        host = urlparse(value).netloc.casefold().split(":", 1)[0]
+    except ValueError:
+        return False
+    return host in {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"}
+
+
+def youtube_download_command(uri, height):
+    command = [
+        str(LOCAL_YTDLP) if LOCAL_YTDLP.is_file() else "yt-dlp",
+        "--no-playlist", "--no-progress",
+        "-f", f"bv*[height<={height}]+ba/b[height<={height}]",
+        "--merge-output-format", "mp4", "--remux-video", "mp4",
+        "--print", "after_move:filepath",
+        "-o", str(LIBRARY_DIR / "%(title).160B [YouTube]-%(id)s.%(ext)s"),
+        uri,
+    ]
+    return command
 
 
 class TasteStore:
@@ -410,6 +432,10 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         import_button = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="Importer des vidéos")
         import_button.connect("clicked", self.import_videos)
         header.pack_start(import_button)
+        youtube_button = Gtk.Button(icon_name="video-x-generic-symbolic",
+                                    tooltip_text="Importer une vidéo YouTube")
+        youtube_button.connect("clicked", self.import_youtube)
+        header.pack_start(youtube_button)
         refresh_button = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Actualiser la bibliothèque")
         refresh_button.connect("clicked", lambda _button: self.load_library())
         header.pack_start(refresh_button)
@@ -714,7 +740,8 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             download_uri = page_download_url(uri)
             result = subprocess.run(
                 [
-                    "yt-dlp", "--no-playlist", "--no-progress",
+                    str(LOCAL_YTDLP) if LOCAL_YTDLP.is_file() else "yt-dlp",
+                    "--no-playlist", "--no-progress",
                     "--print", "after_move:filepath",
                     "-o", str(LIBRARY_DIR / f"{title[:160]}.%(ext)s"), download_uri,
                 ],
@@ -871,6 +898,74 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         filters.append(video_filter)
         dialog.set_filters(filters)
         dialog.open_multiple(self, None, self.import_finished)
+
+    def import_youtube(self, _button):
+        dialog = Gtk.Window(title="Importer depuis YouTube", transient_for=self,
+                            modal=True, default_width=480, resizable=False)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14,
+                          margin_top=18, margin_bottom=18, margin_start=18, margin_end=18)
+        content.append(Gtk.Label(label="Vidéo YouTube", xalign=0, css_classes=["title-2"]))
+        url_entry = Gtk.Entry(placeholder_text="https://www.youtube.com/watch?v=…")
+        content.append(url_entry)
+        quality_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        quality_box.append(Gtk.Label(label="Qualité", xalign=0, hexpand=True))
+        quality = Gtk.DropDown.new_from_strings(["1080p", "1440p", "2160p (4K)"])
+        quality.set_selected(2)
+        quality_box.append(quality)
+        content.append(quality_box)
+        error = Gtk.Label(label="", xalign=0, wrap=True, css_classes=["error"])
+        content.append(error)
+        actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                          halign=Gtk.Align.END)
+        cancel = Gtk.Button(label="Annuler")
+        cancel.connect("clicked", lambda _button: dialog.close())
+        actions.append(cancel)
+        download = Gtk.Button(label="Télécharger", css_classes=["suggested-action"])
+
+        def start(_button):
+            uri = url_entry.get_text().strip()
+            if not is_youtube_url(uri):
+                error.set_text("Adresse YouTube invalide")
+                return
+            heights = (1080, 1440, 2160)
+            dialog.close()
+            self.start_youtube_download(uri, heights[quality.get_selected()])
+
+        download.connect("clicked", start)
+        url_entry.connect("activate", start)
+        actions.append(download)
+        content.append(actions)
+        dialog.set_child(content)
+        dialog.present()
+        url_entry.grab_focus()
+
+    def start_youtube_download(self, uri, height):
+        self.views.set_visible_child_name("library")
+        self.status.set_text(f"Téléchargement YouTube en {height}p…")
+
+        def worker():
+            result = subprocess.run(
+                youtube_download_command(uri, height),
+                capture_output=True, text=True, check=False,
+            )
+            GLib.idle_add(self.youtube_download_finished, uri, result)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def youtube_download_finished(self, uri, result):
+        paths = [Path(line.strip()) for line in result.stdout.splitlines() if line.strip()]
+        if result.returncode != 0 or not paths or not paths[-1].is_file():
+            messages = [line for line in result.stderr.splitlines() if line.strip()]
+            detail = messages[-1] if messages else "Téléchargement YouTube impossible"
+            self.status.set_text(detail)
+            return
+        self.selected = paths[-1]
+        self.taste.record(uri, self.selected.stem, 2.0, candidate=True)
+        self.load_library()
+        self.selected_label.set_text(self.selected.name)
+        self.apply_button.set_sensitive(True)
+        self.login_button.set_sensitive(True)
+        self.status.set_text(f"Vidéo YouTube prête : {self.selected.name}")
 
     def import_finished(self, dialog, result):
         try:

@@ -83,6 +83,12 @@ Le navigateur intégré active par défaut un bloqueur de publicités : règles 
 les régies connues, masquage des emplacements publicitaires et refus des fenêtres
 surgissantes automatiques. Le bouton bouclier permet de désactiver temporairement la
 protection lorsqu'un site en a besoin.
+Le bouton vidéo de la barre principale importe aussi une URL YouTube en `1080p`,
+`1440p` ou `2160p`. `yt-dlp` télécharge et remuxe la meilleure piste disponible en
+MP4, l'ajoute à la bibliothèque et la sélectionne pour l'écran choisi. L'utilisateur
+doit disposer des droits nécessaires sur la vidéo importée.
+MPVpaper Engine privilégie `~/.local/bin/yt-dlp` lorsqu'il existe, car la version
+fournie par Debian peut devenir trop ancienne pour les changements fréquents de YouTube.
 Le fil utilise des cartes visuelles avec grande miniature mise en cache, titre, source,
 note, tags, favori et ouverture directe de la fiche dans **Découvrir**.
 La note sur 5 est calibrée selon la pertinence et le volume d'interactions : les

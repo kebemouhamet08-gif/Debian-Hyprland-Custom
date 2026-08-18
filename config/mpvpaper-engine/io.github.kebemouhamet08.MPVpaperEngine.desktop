@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=MPVpaper Engine
+Comment=Gérer des fonds d'écran vidéo sous Hyprland
+Exec=mpvpaper-engine
+Icon=video-display
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=wallpaper;video;mpv;hyprland;
+StartupNotify=true
+StartupWMClass=io.github.kebemouhamet08.MPVpaperEngine

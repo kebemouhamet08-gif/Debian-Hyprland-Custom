@@ -61,6 +61,21 @@ prononcé de 70 % avec `hyprsunset`. Le raccourci `Super+Shift+O` bascule entre 
 rendu plus sombre et les couleurs neutres. Les valeurs peuvent être ajustées avec
 `CAELESTIA_DISPLAY_GAMMA` et `CAELESTIA_DISPLAY_TEMPERATURE`.
 
+### MPVpaper Engine
+
+Une interface GTK 4 permet de gérer les fonds d'écran vidéo avec miniatures,
+recherche, import, choix du moniteur, volume, vitesse, décodage matériel et pause
+automatique en plein écran. Installez-la puis ouvrez-la depuis le menu des
+applications ou avec `Super+Alt+W` :
+
+```bash
+chmod +x install-mpvpaper-engine.sh
+./install-mpvpaper-engine.sh
+```
+
+Les vidéos importées sont conservées dans `~/Pictures/Wallpapers/Live`. Le dernier
+fond peut être restauré automatiquement à l'ouverture de la session Hyprland.
+
 ## v1 — Debian Glass / Waybar
 
 Une surcouche réutilisable pour les dotfiles

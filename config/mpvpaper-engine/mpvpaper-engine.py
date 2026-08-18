@@ -159,7 +159,20 @@ class TasteStore:
             affinity = sum(profile.get(tag, 0.0) for tag in tags)
             freshness = min(1.0, max(0.0, (time.time() - last_seen) / 604800))
             total = score * 0.5 + affinity * 0.3 + freshness * 0.2 - views * 0.05
-            scored.append((total, uri, title, source, tags))
+            scored.append((total, uri, title, source, tags, score, views))
+        if scored:
+            minimum = min(item[0] for item in scored)
+            maximum = max(item[0] for item in scored)
+            span = maximum - minimum
+            calibrated = []
+            for total, uri, title, source, tags, interaction_score, views in scored:
+                relative = 0.5 if span < 0.0001 else (total - minimum) / span
+                evidence = max(0.0, interaction_score - 0.1) + views * 0.5
+                confidence = min(1.0, evidence / 12.0)
+                raw_rating = 3.0 + relative * 2.0
+                rating = 3.0 + (raw_rating - 3.0) * confidence
+                calibrated.append((total, uri, title, source, tags, rating, confidence))
+            scored = calibrated
         scored.sort(reverse=True)
         result, selected_uris = [], set()
         best_by_source = {}
@@ -327,7 +340,8 @@ class WallpaperCard(Gtk.FlowBoxChild):
 
 
 class SuggestionCard(Gtk.FlowBoxChild):
-    def __init__(self, title, source, tags, score, thumbnail, open_callback, favorite_callback):
+    def __init__(self, title, source, tags, rating, confidence, thumbnail,
+                 open_callback, favorite_callback):
         super().__init__()
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                           css_classes=["suggestion-card"])
@@ -340,9 +354,13 @@ class SuggestionCard(Gtk.FlowBoxChild):
         content.append(Gtk.Label(label=source, xalign=0, ellipsize=3,
                                  css_classes=["suggestion-source"]))
         details = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        stars = max(3, min(5, int(round(3 + score))))
-        details.append(Gtk.Label(label="★" * stars + "☆" * (5 - stars), xalign=0,
-                                 hexpand=True, css_classes=["suggestion-rating"]))
+        stars = max(1, min(5, int(round(rating))))
+        rating_label = Gtk.Label(
+            label="★" * stars + "☆" * (5 - stars) + f"  {rating:.1f}",
+            xalign=0, hexpand=True, css_classes=["suggestion-rating"],
+            tooltip_text=f"Note calculée sur les interactions · confiance {confidence * 100:.0f} %",
+        )
+        details.append(rating_label)
         favorite = Gtk.Button(icon_name="emblem-favorite-symbolic", tooltip_text="J’aime")
         favorite.connect("clicked", favorite_callback)
         details.append(favorite)
@@ -558,12 +576,12 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             f"{len(recommendations)} résultats classés localement et diversifiés par style."
         )
         missing = []
-        for score, uri, title, source, tags in recommendations:
+        for score, uri, title, source, tags, rating, confidence in recommendations:
             thumbnail = suggestion_thumbnail_path(uri)
             card = SuggestionCard(
-                title, source, tags, score, thumbnail,
+                title, source, tags, rating, confidence, thumbnail,
                 lambda _button, target=uri: self.open_suggestion(_button, target),
-                lambda _button, label=title: self.favorite_suggestion(label),
+                lambda _button, target=uri, label=title: self.favorite_suggestion(target, label),
             )
             self.suggestion_flow.append(card)
             if not thumbnail.exists() and uri not in self.suggestion_thumbnail_attempted:
@@ -580,8 +598,8 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         if changed:
             GLib.idle_add(self.refresh_suggestions)
 
-    def favorite_suggestion(self, title):
-        self.taste.reinforce(title, 4.0)
+    def favorite_suggestion(self, uri, title):
+        self.taste.record(uri, title, 4.0, candidate=True)
         self.refresh_suggestions()
 
     def open_suggestion(self, _button, uri):

@@ -81,6 +81,9 @@ Les projets Steam de type `Scene` ou `Web` nécessitent Wallpaper Engine/Steam ;
 éléments de type `Video` ne sont importables que si Steam expose un fichier accessible.
 Le fil utilise des cartes visuelles avec grande miniature mise en cache, titre, source,
 note, tags, favori et ouverture directe de la fiche dans **Découvrir**.
+La note sur 5 est calibrée selon la pertinence et le volume d'interactions : les
+nouveaux éléments restent proches de 3,0, puis visites, téléchargements et favoris
+augmentent progressivement la confiance au lieu de produire une note arbitraire.
 Installez-la puis ouvrez-la depuis le menu des
 applications ou avec le bouton **Fond d'écran** situé en bas de l'écran :
 

@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 
 import hashlib
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import threading
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
+from urllib.request import Request, urlopen
 
 import gi
 
@@ -36,6 +38,38 @@ WALLPAPER_SOURCES = {
     "MoeWalls": "https://moewalls.com/",
     "VSThemes": "https://vsthemes.org/en/wallpapers/page/4/",
 }
+
+
+class DownloadLinkParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.links = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "a":
+            return
+        href = dict(attrs).get("href", "")
+        lowered = href.lower()
+        if "/dl/" in lowered or lowered.endswith(tuple(VIDEO_EXTENSIONS)):
+            self.links.append(href)
+
+
+def page_download_url(uri):
+    try:
+        request = Request(uri, headers={"User-Agent": "Mozilla/5.0 MPVpaperEngine/1.0"})
+        with urlopen(request, timeout=15) as response:
+            parser = DownloadLinkParser()
+            parser.feed(response.read().decode("utf-8", "replace"))
+        if parser.links:
+            ranked = sorted(
+                parser.links,
+                key=lambda link: ("/4k/" in link.lower(), "/hd/" in link.lower()),
+                reverse=True,
+            )
+            return urljoin(uri, ranked[0])
+    except (OSError, ValueError):
+        pass
+    return uri
 
 
 def load_config():
@@ -238,12 +272,17 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.web_address = Gtk.Entry(hexpand=True, placeholder_text="Rechercher ou saisir une adresse")
         self.web_address.connect("activate", self.open_web_address)
         navigation.append(self.web_address)
+        download_button = Gtk.Button(icon_name="document-save-symbolic",
+                                     tooltip_text="Télécharger la vidéo de cette page")
+        download_button.connect("clicked", self.download_current_page)
+        navigation.append(download_button)
         page.append(navigation)
 
         self.web_view = WebKit.WebView()
         self.web_view.set_vexpand(True)
         self.web_view.connect("notify::uri", self.web_uri_changed)
         self.web_view.connect("load-changed", self.web_load_changed)
+        self.web_view.connect("decide-policy", self.web_decide_policy)
         WebKit.NetworkSession.get_default().connect("download-started", self.download_started)
         page.append(self.web_view)
         self.download_status = Gtk.Label(
@@ -275,6 +314,46 @@ class MPVpaperWindow(Adw.ApplicationWindow):
     def web_load_changed(self, web_view, event):
         if event == WebKit.LoadEvent.FINISHED:
             self.download_status.set_text(web_view.get_title() or "Page chargée")
+
+    def web_decide_policy(self, _web_view, decision, decision_type):
+        if decision_type != WebKit.PolicyDecisionType.NEW_WINDOW_ACTION:
+            return False
+        action = decision.get_navigation_action()
+        self.web_view.load_uri(action.get_request().get_uri())
+        decision.ignore()
+        return True
+
+    def download_current_page(self, _button):
+        uri = self.web_view.get_uri()
+        if not uri:
+            return
+        self.download_status.set_text("Recherche de la vidéo sur cette page…")
+        title = (self.web_view.get_title() or "fond-video").replace("/", "-")
+
+        def worker():
+            download_uri = page_download_url(uri)
+            result = subprocess.run(
+                [
+                    "yt-dlp", "--no-playlist", "--no-progress",
+                    "--print", "after_move:filepath",
+                    "-o", str(LIBRARY_DIR / f"{title[:160]}.%(ext)s"), download_uri,
+                ],
+                capture_output=True, text=True, check=False,
+            )
+            GLib.idle_add(self.page_download_finished, result)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def page_download_finished(self, result):
+        if result.returncode == 0:
+            paths = [line for line in result.stdout.splitlines() if line.strip()]
+            name = Path(paths[-1]).name if paths else "vidéo"
+            self.download_status.set_text(f"Ajouté à la bibliothèque : {name}")
+            self.load_library()
+        else:
+            message = result.stderr.strip().splitlines()
+            detail = message[-1] if message else "aucune vidéo détectée"
+            self.download_status.set_text(f"Téléchargement impossible : {detail}")
 
     def download_started(self, _session, download):
         download.connect("decide-destination", self.choose_download_destination)

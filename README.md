@@ -67,11 +67,13 @@ Une interface GTK 4 permet de gérer les fonds d'écran vidéo avec miniatures,
 recherche, import, choix du moniteur, volume, vitesse, décodage matériel et pause
 automatique en plein écran. L'onglet **Découvrir** intègre MotionBGS, MoeWalls et
 VSThemes avec navigation et téléchargement direct dans la bibliothèque, grâce à
-WebKitGTK 6.0. Installez-la puis ouvrez-la depuis le menu des
+WebKitGTK 6.0. Les liens ouverts dans une nouvelle fenêtre restent dans l'application
+et le bouton de téléchargement utilise `yt-dlp` pour extraire la vidéo de la page.
+Installez-la puis ouvrez-la depuis le menu des
 applications ou avec le bouton **Fond d'écran** situé en bas de l'écran :
 
 ```bash
-sudo apt install gir1.2-webkit-6.0
+sudo apt install gir1.2-webkit-6.0 yt-dlp
 chmod +x install-mpvpaper-engine.sh
 ./install-mpvpaper-engine.sh
 ```

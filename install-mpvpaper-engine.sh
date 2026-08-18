@@ -10,7 +10,7 @@ desktop_dir="$HOME/.local/share/applications"
 timestamp="$(date +%Y%m%d-%H%M%S)"
 backup_dir="$HOME/.config/mpvpaper-engine-backup-$timestamp"
 
-for command_name in mpvpaper ffmpegthumbnailer ffprobe python3 systemd-run hyprctl; do
+for command_name in mpvpaper ffmpegthumbnailer ffprobe python3 systemd-run hyprctl yt-dlp; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
         printf 'Dépendance manquante : %s\n' "$command_name" >&2
         exit 1

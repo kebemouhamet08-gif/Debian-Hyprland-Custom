@@ -43,6 +43,15 @@ WALLPAPER_SOURCES = {
     "MoeWalls": "https://moewalls.com/",
     "VSThemes": "https://vsthemes.org/en/wallpapers/page/4/",
 }
+DEFAULT_SUGGESTIONS = (
+    ("https://motionbgs.com/brain-interface", "Brain Interface Live Wallpaper", "technology sci-fi minimal"),
+    ("https://motionbgs.com/cyberpunk-tokyo-city", "Cyberpunk Tokyo City Live Wallpaper", "cyberpunk city games"),
+    ("https://motionbgs.com/chihiro-spirited-away", "Chihiro Spirited Away Live Wallpaper", "anime fantasy"),
+    ("https://motionbgs.com/frieren-minimal-art", "Frieren Minimal Art Live Wallpaper", "anime minimal black white"),
+    ("https://motionbgs.com/bmw-m4-black", "BMW M4 Black Live Wallpaper", "car bmw dark"),
+    ("https://motionbgs.com/summer-mountain-paradise", "Summer Mountain Paradise Live Wallpaper", "nature mountain landscape"),
+    ("https://motionbgs.com/edge-of-the-universe", "Edge of the Universe Live Wallpaper", "space universe sci-fi"),
+)
 TAG_STOPWORDS = {
     "wallpaper", "live", "animated", "background", "video", "fond", "ecran",
     "the", "and", "for", "with", "from", "page", "https", "www", "com",
@@ -74,6 +83,12 @@ class TasteStore:
         self.connection.executemany(
             "DELETE FROM candidates WHERE uri = ?",
             ((uri,) for uri in WALLPAPER_SOURCES.values()),
+        )
+        self.connection.executemany(
+            """INSERT OR IGNORE INTO candidates
+               (uri,title,source,tags,score,views,last_seen)
+               VALUES(?,?,'motionbgs.com',?,0.1,0,0)""",
+            DEFAULT_SUGGESTIONS,
         )
         self.connection.commit()
 
@@ -127,13 +142,13 @@ class TasteStore:
             total = score * 0.5 + affinity * 0.3 + freshness * 0.2 - views * 0.05
             scored.append((total, uri, title, source, tags))
         scored.sort(reverse=True)
-        result, source_counts = [], {}
+        result, category_counts = [], {}
         for item in scored:
-            source = item[3]
-            if source_counts.get(source, 0) >= 3:
+            category = item[4][0] if item[4] else item[3]
+            if category_counts.get(category, 0) >= 3:
                 continue
             result.append(item)
-            source_counts[source] = source_counts.get(source, 0) + 1
+            category_counts[category] = category_counts.get(category, 0) + 1
             if len(result) == limit:
                 break
         return result

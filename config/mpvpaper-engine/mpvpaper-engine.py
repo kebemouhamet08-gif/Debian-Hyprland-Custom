@@ -7,12 +7,14 @@ from pathlib import Path
 import shutil
 import subprocess
 import threading
+from urllib.parse import quote_plus
 
 import gi
 
 gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk
+gi.require_version("WebKit", "6.0")
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk, WebKit
 
 
 APP_ID = "io.github.kebemouhamet08.MPVpaperEngine"
@@ -28,6 +30,11 @@ SDDM_INSTALLER = Path.home() / ".local" / "lib" / "mpvpaper-engine" / "install-s
 DEFAULT_CONFIG = {
     "wallpaper": "", "output": "*", "volume": 0, "speed": 1.0,
     "loop": True, "hardware_decode": True, "auto_pause": True, "autostart": True,
+}
+WALLPAPER_SOURCES = {
+    "MotionBGS": "https://motionbgs.com/",
+    "MoeWalls": "https://moewalls.com/",
+    "VSThemes": "https://vsthemes.org/en/wallpapers/page/4/",
 }
 
 
@@ -114,8 +121,6 @@ class MPVpaperWindow(Adw.ApplicationWindow):
     def build_ui(self):
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
-        title = Adw.WindowTitle(title="MPVpaper Engine", subtitle="Fonds vidéo pour Hyprland")
-        header.set_title_widget(title)
         import_button = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="Importer des vidéos")
         import_button.connect("clicked", self.import_videos)
         header.pack_start(import_button)
@@ -202,8 +207,103 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         inspector.append(self.status)
         inspector_scroll.set_child(inspector)
         paned.set_end_child(inspector_scroll)
-        toolbar.set_content(paned)
+
+        self.views = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
+        self.views.add_titled(paned, "library", "Bibliothèque")
+        self.views.add_titled(self.build_discover_view(), "discover", "Découvrir")
+        switcher = Gtk.StackSwitcher(stack=self.views)
+        header.set_title_widget(switcher)
+        toolbar.set_content(self.views)
         self.set_content(toolbar)
+
+    def build_discover_view(self):
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
+                       margin_top=8, margin_bottom=8, margin_start=8, margin_end=8)
+        navigation = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        back = Gtk.Button(icon_name="go-previous-symbolic", tooltip_text="Page précédente")
+        back.connect("clicked", lambda _button: self.web_view.go_back())
+        navigation.append(back)
+        forward = Gtk.Button(icon_name="go-next-symbolic", tooltip_text="Page suivante")
+        forward.connect("clicked", lambda _button: self.web_view.go_forward())
+        navigation.append(forward)
+        reload_button = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Actualiser la page")
+        reload_button.connect("clicked", lambda _button: self.web_view.reload())
+        navigation.append(reload_button)
+
+        self.source_names = list(WALLPAPER_SOURCES)
+        sources = Gtk.DropDown.new_from_strings(self.source_names)
+        sources.set_tooltip_text("Catalogue de fonds vidéo")
+        sources.connect("notify::selected", self.source_changed)
+        navigation.append(sources)
+        self.web_address = Gtk.Entry(hexpand=True, placeholder_text="Rechercher ou saisir une adresse")
+        self.web_address.connect("activate", self.open_web_address)
+        navigation.append(self.web_address)
+        page.append(navigation)
+
+        self.web_view = WebKit.WebView()
+        self.web_view.set_vexpand(True)
+        self.web_view.connect("notify::uri", self.web_uri_changed)
+        self.web_view.connect("load-changed", self.web_load_changed)
+        WebKit.NetworkSession.get_default().connect("download-started", self.download_started)
+        page.append(self.web_view)
+        self.download_status = Gtk.Label(
+            label="Les vidéos téléchargées apparaissent automatiquement dans la bibliothèque.",
+            xalign=0, ellipsize=3, css_classes=["dim-label"],
+        )
+        page.append(self.download_status)
+        self.web_view.load_uri(WALLPAPER_SOURCES[self.source_names[0]])
+        return page
+
+    def source_changed(self, dropdown, _property):
+        self.web_view.load_uri(WALLPAPER_SOURCES[self.source_names[dropdown.get_selected()]])
+
+    def open_web_address(self, entry):
+        value = entry.get_text().strip()
+        if not value:
+            return
+        if value.startswith(("https://", "http://")):
+            uri = value
+        elif "." in value and " " not in value:
+            uri = "https://" + value
+        else:
+            uri = "https://duckduckgo.com/?q=" + quote_plus(value + " live wallpaper mp4")
+        self.web_view.load_uri(uri)
+
+    def web_uri_changed(self, web_view, _property):
+        self.web_address.set_text(web_view.get_uri() or "")
+
+    def web_load_changed(self, web_view, event):
+        if event == WebKit.LoadEvent.FINISHED:
+            self.download_status.set_text(web_view.get_title() or "Page chargée")
+
+    def download_started(self, _session, download):
+        download.connect("decide-destination", self.choose_download_destination)
+        download.connect("notify::estimated-progress", self.download_progress)
+        download.connect("finished", self.download_finished)
+        download.connect("failed", self.download_failed)
+
+    def choose_download_destination(self, download, suggested_name):
+        name = Path(suggested_name or "fond-video.mp4").name
+        destination = LIBRARY_DIR / name
+        counter = 2
+        while destination.exists():
+            destination = LIBRARY_DIR / f"{Path(name).stem}-{counter}{Path(name).suffix}"
+            counter += 1
+        download.set_destination(destination.as_uri())
+        self.download_status.set_text(f"Téléchargement : {destination.name}")
+        return True
+
+    def download_progress(self, download, _property):
+        progress = int(download.get_estimated_progress() * 100)
+        self.download_status.set_text(f"Téléchargement en cours : {progress} %")
+
+    def download_finished(self, download):
+        destination = Gio.File.new_for_uri(download.get_destination()).get_path()
+        self.download_status.set_text(f"Ajouté à la bibliothèque : {Path(destination).name}")
+        self.load_library()
+
+    def download_failed(self, _download, error):
+        self.download_status.set_text(f"Échec du téléchargement : {error.message}")
 
     def switch_row(self, title, subtitle, active):
         row = Adw.ActionRow(title=title, subtitle=subtitle)

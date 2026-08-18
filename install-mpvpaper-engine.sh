@@ -17,9 +17,9 @@ for command_name in mpvpaper ffmpegthumbnailer ffprobe python3 systemd-run hyprc
     fi
 done
 
-python3 -c "import gi; gi.require_version('Adw', '1'); gi.require_version('Gtk', '4.0')" \
+python3 -c "import gi; gi.require_version('Adw', '1'); gi.require_version('Gtk', '4.0'); gi.require_version('WebKit', '6.0')" \
     2>/dev/null || {
-        printf 'Dépendances GTK manquantes : python3-gi, gir1.2-gtk-4.0 ou gir1.2-adw-1.\n' >&2
+        printf 'Dépendances GTK manquantes : python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1 ou gir1.2-webkit-6.0.\n' >&2
         exit 1
     }
 

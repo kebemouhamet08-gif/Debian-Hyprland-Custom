@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 import json
+import os
 import shutil
+import socket
 import subprocess
 from pathlib import Path
 
@@ -13,6 +15,56 @@ from gi.repository import Adw, GLib, Gtk
 
 
 APP_ID = "io.github.kebemouhamet08.PeriphX"
+
+
+def pericored_inventory():
+    socket_path = os.environ.get(
+        "PERIPHX_SOCKET",
+        os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "periphx", "pericored.sock"),
+    )
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(1)
+            client.connect(socket_path)
+            client.sendall(b'{"method":"ListDevices"}\n')
+            response = client.makefile("rb").readline()
+        payload = json.loads(response)
+        if payload.get("ok"):
+            return payload["result"].get("devices", [])
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        pass
+    return None
+
+
+def daemon_device_groups():
+    devices = pericored_inventory()
+    if devices is None:
+        return None
+    grouped = {}
+    labels = {
+        "keyboard": ("Claviers", "Périphériques clavier vus par pericored", "input"),
+        "mouse": ("Souris", "Périphériques souris vus par pericored", "input"),
+        "touchpad": ("Pavés tactiles", "Périphériques tactiles vus par pericored", "input"),
+        "gamepad": ("Manettes", "Périphériques gamepad vus par pericored", "gamepad"),
+        "monitor": ("Écrans", "Sorties écran vues par pericored", "display"),
+        "gpu": ("Cartes graphiques", "GPU vus par pericored", "component"),
+        "hid": ("HID", "Périphériques HID vus par pericored", "usb"),
+        "unknown": ("Autres périphériques", "Périphériques vus par pericored", "usb"),
+    }
+    for device in devices:
+        device_class = device.get("class", "unknown")
+        title, subtitle, kind = labels.get(device_class, labels["unknown"])
+        identifier = device.get("id", "")
+        details = " · ".join(filter(None, (
+            device.get("manufacturer"),
+            device.get("vendor_id"),
+            device.get("product_id"),
+            identifier,
+        )))
+        grouped.setdefault((title, subtitle, kind), []).append(
+            f"{device.get('name', 'Périphérique')} · {details}"
+        )
+    return [(title, subtitle, items, kind) for (title, subtitle, kind), items in grouped.items()]
 
 
 def run_command(*command, timeout=3):
@@ -88,6 +140,9 @@ def input_scope(label):
 
 
 def device_groups():
+    daemon_groups = daemon_device_groups()
+    if daemon_groups is not None:
+        return daemon_groups
     groups = []
     usb = run_command("lsusb")
     usb_items = [line for line in usb.splitlines() if line.strip()]
@@ -341,7 +396,10 @@ class DeviceCenter(Adw.ApplicationWindow):
     def refresh(self):
         groups = device_groups()
         total = sum(len(items) for _title, _subtitle, items, _kind in groups)
-        self.overview_status.set_text(f"{total} élément(s) détecté(s) · actualisé maintenant")
+        source = "pericored" if pericored_inventory() is not None else "détection locale"
+        self.overview_status.set_text(
+            f"{total} élément(s) détecté(s) · source : {source} · actualisé maintenant"
+        )
         groups_signature = tuple(
             (title, subtitle, tuple(items), kind)
             for title, subtitle, items, kind in groups

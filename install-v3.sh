@@ -9,11 +9,14 @@ state_file="$state_dir/state"
 history_file="$state_dir/history.log"
 manifest="$repo_dir/config/v3/components.tsv"
 app_source="$repo_dir/config/v3/device-center.py"
+cli_source="$repo_dir/config/v3/periphx.py"
 desktop_source="$repo_dir/config/v3/io.github.kebemouhamet08.DebianNextV3Devices.desktop"
+service_source="$repo_dir/config/v3/pericored/pericored.service"
 install_dir="$HOME/.local/lib/debian-next-v3"
 bin_dir="$HOME/.local/bin"
 desktop_dir="$HOME/.local/share/applications"
 app_target="$install_dir/device-center.py"
+cli_target="$install_dir/periphx.py"
 app_command="$bin_dir/periphx"
 launcher_target="$install_dir/periphx-launcher"
 legacy_command="$bin_dir/debian-next-v3-devices"
@@ -22,6 +25,8 @@ shell_config="$HOME/.zshrc"
 pericore_manifest="$repo_dir/config/v3/pericored/Cargo.toml"
 pericore_binary="$repo_dir/config/v3/pericored/target/release/pericored"
 pericore_command="$bin_dir/pericored"
+service_dir="$config_home/systemd/user"
+service_target="$service_dir/pericored.service"
 dry_run=0
 
 usage() {
@@ -50,7 +55,7 @@ check_v3() {
         printf 'MANQUANT manifeste : %s\n' "$manifest" >&2
         failed=1
     fi
-    for source in "$app_source" "$desktop_source"; do
+    for source in "$app_source" "$cli_source" "$desktop_source" "$service_source"; do
         if [ -f "$source" ]; then
             printf 'OK       %s\n' "$(basename "$source")"
         else
@@ -76,14 +81,16 @@ install_v3() {
     if ((dry_run)); then
         log_action "mkdir -p $state_dir"
         log_action "installer $app_source vers $app_target"
+        log_action "installer $cli_source vers $cli_target"
         log_action "installer le lanceur $app_command"
         log_action "installer $desktop_source vers $desktop_target"
         log_action "compiler pericored avec cargo +stable"
         log_action "lier $pericore_command vers $pericore_binary"
+        log_action "installer et activer $service_target"
         log_action "initialiser $state_file et $history_file"
         return
     fi
-    mkdir -p "$state_dir" "$install_dir" "$bin_dir" "$desktop_dir"
+    mkdir -p "$state_dir" "$install_dir" "$bin_dir" "$desktop_dir" "$service_dir"
     if command -v cargo >/dev/null 2>&1; then
         cargo +stable build --release --manifest-path "$pericore_manifest"
         ln -sfn "$pericore_binary" "$pericore_command"
@@ -91,9 +98,14 @@ install_v3() {
         printf 'INFO     cargo absent : pericored non compilé\n'
     fi
     install -m 0755 "$app_source" "$app_target"
+    install -m 0755 "$cli_source" "$cli_target"
     write_launcher
     ln -sfn "$launcher_target" "$app_command"
     ln -sfn "$launcher_target" "$legacy_command"
+    ln -sfn "$cli_target" "$bin_dir/periphx-cli"
+    install -m 0644 "$service_source" "$service_target"
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+    systemctl --user enable --now pericored.service >/dev/null 2>&1 || true
     ensure_local_bin_path
     install -m 0644 "$desktop_source" "$desktop_target"
     update-desktop-database "$desktop_dir" >/dev/null 2>&1 || true
@@ -108,12 +120,16 @@ install_v3() {
 }
 
 dev_v3() {
-    mkdir -p "$state_dir" "$install_dir" "$bin_dir" "$desktop_dir"
+    mkdir -p "$state_dir" "$install_dir" "$bin_dir" "$desktop_dir" "$service_dir"
     chmod +x "$app_source"
     ln -sfn "$app_source" "$app_target"
     write_launcher
     ln -sfn "$launcher_target" "$app_command"
     ln -sfn "$launcher_target" "$legacy_command"
+    install -m 0755 "$cli_source" "$cli_target"
+    ln -sfn "$cli_target" "$bin_dir/periphx-cli"
+    install -m 0644 "$service_source" "$service_target"
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
     install -m 0644 "$desktop_source" "$desktop_target"
     update-desktop-database "$desktop_dir" >/dev/null 2>&1 || true
     ensure_local_bin_path
@@ -125,6 +141,9 @@ dev_v3() {
 write_launcher() {
     cat >"$launcher_target" <<EOF
 #!/bin/sh
+if [ "\$#" -gt 0 ]; then
+    exec python3 "$cli_target" "\$@"
+fi
 exec python3 "$app_target" "\$@"
 EOF
     chmod 0755 "$launcher_target"
@@ -162,8 +181,10 @@ restore_v3() {
         log_action "supprimer l'état V3 $state_dir"
         return
     fi
+    systemctl --user disable --now pericored.service >/dev/null 2>&1 || true
     rm -f "$app_command" "$legacy_command" "$desktop_target" "$app_target" \
-        "$launcher_target" "$pericore_command"
+        "$cli_target" "$bin_dir/periphx-cli" "$launcher_target" "$pericore_command" \
+        "$service_target"
     rm -rf "$state_dir"
     printf 'État V3 supprimé. Les fichiers V1 et V2 n ont pas été touchés.\n'
 }

@@ -1,0 +1,13 @@
+[Unit]
+Description=PeriphX hardware device daemon
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/pericored
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=periphx
+
+[Install]
+WantedBy=default.target

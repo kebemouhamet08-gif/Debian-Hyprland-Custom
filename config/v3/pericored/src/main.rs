@@ -1,6 +1,14 @@
 use anyhow::Result;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::env;
+use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::fs::PermissionsExt;
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use udev::{Device, Enumerator, EventType, MonitorBuilder};
 
 #[derive(Debug, Serialize, Clone)]
@@ -36,6 +44,15 @@ struct DeviceRegistry {
     nodes: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct Request {
+    method: String,
+    id: Option<String>,
+    params: Option<serde_json::Value>,
+}
+
+type SharedRegistry = Arc<Mutex<DeviceRegistry>>;
+
 fn value(device: &Device, key: &str) -> Option<String> {
     device
         .property_value(key)
@@ -45,7 +62,9 @@ fn value(device: &Device, key: &str) -> Option<String> {
 }
 
 fn devnode(device: &Device) -> Option<String> {
-    device.devnode().map(|path| path.to_string_lossy().into_owned())
+    device
+        .devnode()
+        .map(|path| path.to_string_lossy().into_owned())
 }
 
 fn stable_id(device: &Device, vendor: &Option<String>, product: &Option<String>) -> String {
@@ -135,7 +154,8 @@ impl DeviceRegistry {
     }
 
     fn remove(&mut self, device: &Device) {
-        let node = devnode(device).unwrap_or_else(|| device.syspath().to_string_lossy().into_owned());
+        let node =
+            devnode(device).unwrap_or_else(|| device.syspath().to_string_lossy().into_owned());
         if let Some(id) = self.nodes.remove(&node) {
             if let Some(record) = self.devices.get_mut(&id) {
                 record.connected = false;
@@ -144,14 +164,116 @@ impl DeviceRegistry {
         }
     }
 
-    fn inventory(&self, reason: &str) {
-        let devices: Vec<_> = self.devices.values().filter(|item| item.connected).collect();
-        println!("{}", serde_json::json!({
+    fn inventory_json(&self, reason: &str) -> serde_json::Value {
+        let devices: Vec<_> = self
+            .devices
+            .values()
+            .filter(|item| item.connected)
+            .collect();
+        serde_json::json!({
             "event": "inventory",
             "reason": reason,
             "devices": devices,
-        }));
+        })
     }
+
+    fn device(&self, id: &str) -> Option<&DeviceRecord> {
+        self.devices.get(id).filter(|device| device.connected)
+    }
+}
+
+fn socket_path() -> PathBuf {
+    env::var_os("PERIPHX_SOCKET")
+        .map(PathBuf::from)
+        .or_else(|| {
+            env::var_os("XDG_RUNTIME_DIR")
+                .map(|dir| PathBuf::from(dir).join("periphx/pericored.sock"))
+        })
+        .unwrap_or_else(|| PathBuf::from("/tmp/periphx-pericored.sock"))
+}
+
+fn response(id: Option<String>, result: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({"id": id, "ok": true, "result": result})
+}
+
+fn error_response(id: Option<String>, message: &str) -> serde_json::Value {
+    serde_json::json!({"id": id, "ok": false, "error": message})
+}
+
+fn handle_request(request: Request, registry: &SharedRegistry) -> serde_json::Value {
+    let guard = match registry.lock() {
+        Ok(guard) => guard,
+        Err(_) => return error_response(request.id, "registry unavailable"),
+    };
+    match request.method.as_str() {
+        "ListDevices" | "inventory" => response(request.id, guard.inventory_json("ipc")),
+        "GetDevice" => {
+            let device_id = request
+                .params
+                .as_ref()
+                .and_then(|params| params.get("id"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            match guard.device(device_id) {
+                Some(device) => response(request.id, serde_json::json!(device)),
+                None => error_response(request.id, "device not found"),
+            }
+        }
+        "GetCapabilities" => response(
+            request.id,
+            serde_json::json!({
+                "device_count": guard.devices.values().filter(|device| device.connected).count(),
+                "supported": ["inventory", "device-details", "hotplug-events"],
+            }),
+        ),
+        "GetBattery" | "GetConnection" | "GetProfile" => response(
+            request.id,
+            serde_json::json!({
+                "status": "not-implemented",
+                "message": "backend not available for this device",
+            }),
+        ),
+        _ => error_response(request.id, "unknown method"),
+    }
+}
+
+fn serve_client(mut stream: UnixStream, registry: SharedRegistry) -> Result<()> {
+    let reader = BufReader::new(stream.try_clone()?);
+    for line in reader.lines() {
+        let line = line?;
+        let result = match serde_json::from_str::<Request>(&line) {
+            Ok(request) => handle_request(request, &registry),
+            Err(error) => error_response(None, &format!("invalid request: {error}")),
+        };
+        writeln!(stream, "{}", serde_json::to_string(&result)?)?;
+        stream.flush()?;
+    }
+    Ok(())
+}
+
+fn start_ipc_server(registry: SharedRegistry) -> Result<()> {
+    let path = socket_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let _ = fs::remove_file(&path);
+    let listener = UnixListener::bind(&path)?;
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+    eprintln!("pericored IPC: {}", path.display());
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            match stream {
+                Ok(stream) => {
+                    let registry = Arc::clone(&registry);
+                    thread::spawn(move || {
+                        let _ = serve_client(stream, registry);
+                    });
+                }
+                Err(error) => eprintln!("pericored IPC error: {error}"),
+            }
+        }
+    });
+    Ok(())
 }
 
 fn initial_scan(registry: &mut DeviceRegistry) -> Result<()> {
@@ -168,28 +290,46 @@ fn initial_scan(registry: &mut DeviceRegistry) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let mut registry = DeviceRegistry::default();
+    let mut initial_registry = DeviceRegistry::default();
     let monitor = MonitorBuilder::new()?.listen()?;
-    initial_scan(&mut registry)?;
-    registry.inventory("startup");
+    initial_scan(&mut initial_registry)?;
+    let registry = Arc::new(Mutex::new(initial_registry));
+    start_ipc_server(Arc::clone(&registry))?;
+    if let Ok(registry) = registry.lock() {
+        println!("{}", registry.inventory_json("startup"));
+    }
 
     for event in monitor.iter() {
-        let action = event.action().and_then(|value| value.to_str()).unwrap_or("change");
+        let action = event
+            .action()
+            .and_then(|value| value.to_str())
+            .unwrap_or("change");
         match event.event_type() {
             EventType::Add | EventType::Bind | EventType::Change => {
                 if let Some(record) = record_from_device(&event) {
-                    registry.add(record);
+                    if let Ok(mut registry) = registry.lock() {
+                        registry.add(record);
+                    }
                 }
             }
-            EventType::Remove | EventType::Unbind => registry.remove(&event),
+            EventType::Remove | EventType::Unbind => {
+                if let Ok(mut registry) = registry.lock() {
+                    registry.remove(&event);
+                }
+            }
             _ => {}
         }
-        println!("{}", serde_json::json!({
-            "event": "device-change",
-            "action": action,
-            "syspath": event.syspath().to_string_lossy(),
-        }));
-        registry.inventory("udev");
+        println!(
+            "{}",
+            serde_json::json!({
+                "event": "device-change",
+                "action": action,
+                "syspath": event.syspath().to_string_lossy(),
+            })
+        );
+        if let Ok(registry) = registry.lock() {
+            println!("{}", registry.inventory_json("udev"));
+        }
     }
     Ok(())
 }

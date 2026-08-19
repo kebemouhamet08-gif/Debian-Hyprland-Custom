@@ -55,11 +55,11 @@
 
 "custom/cycle_wall": {
 	"format": " ",
-	"on-click": "$HOME/.config/hypr/UserScripts/WallpaperSelect.sh",
-	"on-click-right": "$HOME/.config/hypr/UserScripts/WallpaperRandom.sh",
+	"on-click": "$HOME/.local/bin/mpvpaper-engine-toggle",
+	"on-click-right": "$HOME/.local/bin/mpvpaper-enginectl random",
 	"on-click-middle": "$HOME/.config/hypr/scripts/WaybarStyles.sh",
 	"tooltip": true,
-	"tooltip-format": "Left Click: Wallpaper Menu\nMiddle Click: Random wallpaper\nRight Click: Waybar Styles Menu",
+	"tooltip-format": "Clic gauche : fonds vidéo MPVpaper\nClic droit : fond vidéo aléatoire\nClic milieu : styles Waybar",
 },
 
 "custom/hint": {

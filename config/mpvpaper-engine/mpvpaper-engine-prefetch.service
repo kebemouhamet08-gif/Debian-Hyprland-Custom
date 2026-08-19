@@ -1,0 +1,9 @@
+[Unit]
+Description=Précharger les suggestions de MPVpaper Engine
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/mpvpaper-engine --prefetch-continuous
+Nice=10
+IOSchedulingClass=idle

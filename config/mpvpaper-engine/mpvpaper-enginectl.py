@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import re
+import secrets
 
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "mpvpaper-engine"
@@ -24,6 +25,11 @@ DEFAULT_CONFIG = {
     "auto_pause": True,
     "autostart": True,
 }
+VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"}
+WALLPAPER_DIRS = (
+    Path.home() / "Pictures" / "Wallpapers" / "Live",
+    Path.home() / "Pictures" / "wallpapers",
+)
 
 
 def load_config():
@@ -107,14 +113,56 @@ def play(config):
     ], check=True)
 
 
+def random_wallpapers():
+    wallpapers = []
+    seen = set()
+    for directory in WALLPAPER_DIRS:
+        if not directory.is_dir():
+            continue
+        for path in directory.rglob("*"):
+            if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS:
+                resolved = path.resolve()
+                if resolved not in seen:
+                    seen.add(resolved)
+                    wallpapers.append(path)
+    return wallpapers
+
+
+def play_random(config):
+    wallpapers = random_wallpapers()
+    if not wallpapers:
+        locations = ", ".join(str(path) for path in WALLPAPER_DIRS)
+        raise SystemExit(f"Aucun fond vidéo trouvé dans : {locations}")
+
+    current = Path(config.get("wallpaper", "")).expanduser()
+    alternatives = [path for path in wallpapers if path != current]
+    selected = secrets.choice(alternatives or wallpapers)
+    config["wallpaper"] = str(selected)
+
+    assignments = config.setdefault("assignments", {})
+    output = config.get("output", "*")
+    if output == "*":
+        assignments.clear()
+    else:
+        assignments.pop("*", None)
+    assignments[output] = {
+        key: config[key] for key in DEFAULT_CONFIG if key != "output"
+    }
+    save_config(config)
+    play(config)
+    print(selected)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Contrôleur de MPVpaper Engine")
-    parser.add_argument("action", choices=("play", "stop", "restore", "status"))
+    parser.add_argument("action", choices=("play", "random", "stop", "restore", "status"))
     args = parser.parse_args()
     config = load_config()
 
     if args.action == "play":
         play(config)
+    elif args.action == "random":
+        play_random(config)
     elif args.action == "stop":
         stop()
     elif args.action == "restore":

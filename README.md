@@ -2,10 +2,58 @@
 
 ## v2 — Debian Immersive avec Caelestia
 
-La v2 remplace la barre Waybar par [Caelestia Shell](https://github.com/caelestia-dots/shell),
+Dans son propre profil, la v2 utilise [Caelestia Shell](https://github.com/caelestia-dots/shell)
+à la place de Waybar,
 une interface Quickshell fluide avec lanceur, tableau de bord, visualiseur audio,
-fond dynamique et panneaux translucides. La configuration v1 « Debian Glass »
-reste disponible et n'est pas supprimée.
+fond dynamique et panneaux translucides. Elle est indépendante de la v1
+« Debian Glass » : aucune version ne remplace l'autre et l'utilisateur installe
+uniquement les expériences qu'il souhaite conserver.
+
+La v2 adopte aussi progressivement certains concepts de
+[HyDE](https://github.com/HyDE-Project/HyDE) : installation modulaire, thèmes
+interchangeables, couleurs dynamiques, sélecteurs et profils. Leur adaptation à
+Debian v2 est découpée en étapes vérifiables dans la
+[feuille de route v2](docs/V2-ROADMAP.md) ; l'installateur Arch de HyDE n'est pas
+utilisé directement.
+
+Le catalogue des thèmes officiels HyDE suivis par la v2 se trouve dans
+`config/v2/themes.tsv`. Il référence les branches de
+[hyde-themes](https://github.com/HyDE-Project/hyde-themes), sans importer leur
+installateur Arch. Chaque thème devra être adapté au format Debian v2 avant son
+activation : Hyprland, GTK, Caelestia/Waybar, icônes, polices et fonds doivent
+rester isolés dans le profil v2 et être restaurables.
+
+Les futures versions suivront la même règle : chaque `vN` apporte une nouvelle
+expérience ou de nouvelles options personnelles avec son propre installateur, ses
+réglages et sa procédure de restauration, sans dépendre d'une version antérieure.
+
+## v3 — Debian Next
+
+La V3 est maintenant préparée comme une expérience indépendante. Son manifeste se
+trouve dans `config/v3/components.tsv` et sa feuille de route dans
+`docs/V3-ROADMAP.md`. Elle ne modifie pas la V1 ou la V2 tant que son installateur
+et ses tests de restauration ne sont pas prêts.
+
+Le premier outil V3 est le centre de contrôle matériel. Installez-le avec :
+
+```bash
+./install-v3.sh check
+./install-v3.sh install
+./install-v3.sh launch
+```
+
+La commande courte `debian-next-v3-devices` fonctionne aussi après avoir ajouté
+`~/.local/bin` au `PATH` :
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+periphx
+```
+
+Il affiche les périphériques USB/HID, Bluetooth, claviers, souris, écrans et manettes détectés
+par Debian. Les capacités DDC/CI, OpenRGB, evdev/uinput et les profils sont
+indiqués séparément ; un périphérique propriétaire ne sera pas piloté sans backend
+compatible ni permission explicite.
 
 ### Prérequis v2
 
@@ -23,8 +71,12 @@ pas disponibles.
 
 ```bash
 chmod +x install-v2.sh
-./install-v2.sh
+./install-v2.sh check
+./install-v2.sh install
 ```
+
+L'installateur v2 est indépendant et propose aussi `status`, `restore` et le mode
+`--dry-run`. `./install-v2.sh` sans argument reste équivalent à `install`.
 
 L'installateur sauvegarde les fichiers concernés dans
 `~/.config/debian-immersive-v2-backup-*`, pose le profil dans
@@ -150,6 +202,44 @@ Les miniatures peuvent prendre quelques secondes à apparaître lors de la premi
 ouverture. Un téléchargement qui échoue peut provenir d'un site ayant changé son
 format ou d'une version trop ancienne de `yt-dlp`; l'application privilégie donc
 automatiquement `~/.local/bin/yt-dlp` lorsqu'il est installé.
+Les suggestions fonctionnent comme un flux renouvelé : les cartes sont tirées au
+hasard selon leur note et vos préférences, et les résultats venant d'être affichés
+sont exclus avant le tirage. SQLite mémorise durablement leur empreinte : une image
+ou une vidéo déjà proposée ne réapparaît pas après la fermeture ou le redémarrage.
+Chaque contenu inédit conserve néanmoins une probabilité minimale afin de favoriser
+la découverte au lieu de rendre les faibles scores invisibles.
+Le fil charge ensuite de nouveaux lots lorsque le défilement atteint le bas. Après
+l'ouverture ou la mise en favori d'une carte, celle-ci devient la graine du flux :
+chaque tag partagé multiplie par cinq la probabilité contextuelle, tout en laissant
+une chance aux styles différents pour permettre une dérive progressive.
+Enfin, 15 % de chaque lot sont réservés en priorité à des tags encore absents du
+profil : cette exploration forcée limite la bulle de filtres et permet aux goûts
+d'évoluer.
+Le défilement n'a aucun plafond logiciel. Lorsqu'il atteint les contenus connus, le
+moteur poursuit les catalogues puis réessaie automatiquement avec un délai progressif
+si les sources sont temporairement inaccessibles. Il attend un contenu réellement
+nouveau au lieu de recycler une ancienne carte. Les miniatures téléchargées se
+mettent à jour sur place sans vider le flux ni remonter la page.
+Dans l'onglet **Suggestions**, le mode Pinterest précharge la suite à 360 pixels de
+la fin et continue jusqu'à remplir la fenêtre. Le nombre de cartes n'est pas fixe :
+il est calculé selon la largeur, la hauteur visible et le nombre de colonnes. Chaque
+lot est produit au moment du chargement à partir du profil, de la graine contextuelle,
+du cooldown et de l'exploration ; il ne s'agit pas d'une liste préparée à l'avance.
+La carte située au centre de la zone visible devient automatiquement la nouvelle
+graine après 120 ms de stabilité. Le prochain lot suit donc naturellement le contenu
+réellement regardé, même sans clic, tandis qu'un clic ou un favori reste un signal
+plus fort pour le profil persistant.
+Quand le flux manque de nouveautés, le moteur interroge immédiatement les catalogues
+configurés et ajoute les fiches inédites à SQLite. Un timer utilisateur poursuit aussi
+l'exploration à faible priorité toutes les cinq minutes, à l'ouverture de session et
+après la fermeture de MPVpaper Engine. Il n'existe ni cible totale ni nombre maximal
+de suggestions : chaque petite passe reprend la frontière persistante là où la
+précédente s'est arrêtée.
+Ces passes ne téléchargent pas les vidéos.
+Les URL sont en plus dédupliquées par contenu : identifiant vidéo YouTube, identifiant
+Steam ou signature normalisée du titre. Deux pages pointant vers la même vidéo ou la
+même image ne peuvent donc pas occuper deux cartes du flux. Cette exclusion persiste
+entre toutes les sessions.
 
 Le bouton inférieur fonctionne comme une bascule : un premier clic ouvre
 MPVpaper Engine et un second clic ferme sa fenêtre.
@@ -159,6 +249,8 @@ fond peut être restauré automatiquement à l'ouverture de la session Hyprland.
 Chaque écran peut conserver un fond et des réglages différents : appliquer un fond
 à `eDP-1` ne redémarre plus celui de `HDMI-A-1`. Le choix **Tous les écrans** remplace
 volontairement les affectations individuelles par un fond commun.
+Sur toutes les configurations Waybar fournies, un clic droit sur le module de fond
+d'écran choisit une vidéo aléatoire en conservant les réglages MPVpaper actifs.
 Le raccourci `Super+W` reste réservé au sélecteur standard de fonds d'écran fixes.
 Le bouton **Utiliser pour l'écran de connexion** extrait une image de la vidéo
 sélectionnée, ouvre un terminal d'autorisation et l'installe dans le thème SDDM

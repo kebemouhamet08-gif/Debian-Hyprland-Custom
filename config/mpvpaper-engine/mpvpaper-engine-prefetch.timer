@@ -1,0 +1,12 @@
+[Unit]
+Description=Poursuivre régulièrement l'exploration des suggestions MPVpaper Engine
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+Persistent=true
+Unit=mpvpaper-engine-prefetch.service
+
+[Install]
+WantedBy=timers.target

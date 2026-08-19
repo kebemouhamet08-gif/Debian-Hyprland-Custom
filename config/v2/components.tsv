@@ -1,0 +1,6 @@
+# identifiant	type	requis	commande	paquet Debian / méthode
+hyprland	runtime	oui	Hyprland|hyprctl	hyprland
+quickshell-git	runtime	oui	qs	compilation de Quickshell git
+caelestia-cli	runtime	oui	caelestia	installation officielle Caelestia
+mpvpaper-engine	option	non	mpvpaper-enginectl	install-mpvpaper-engine.sh
+wallpapers	data	oui	-	~/Pictures/Wallpapers

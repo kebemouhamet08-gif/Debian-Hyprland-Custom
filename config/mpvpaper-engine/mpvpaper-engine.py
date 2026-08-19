@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 
 import configparser
+import fcntl
 import hashlib
 from html.parser import HTMLParser
 import json
 import math
 import os
 from pathlib import Path
+import random
 import re
 import shutil
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import parse_qs, quote_plus, urljoin
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
@@ -33,9 +36,22 @@ CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "mp
 METADATA_FILE = CACHE_DIR.parent / "metadata.json"
 TASTE_DB = CONFIG_DIR / "suggestions.db"
 SUGGESTION_CACHE = CACHE_DIR.parent / "suggestions"
+RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/tmp/mpvpaper-engine-{os.getuid()}"))
+SUGGESTION_HISTORY_FILE = RUNTIME_DIR / "suggestion-history.json"
+SUGGESTION_COOLDOWN = 12
+EXPLORATION_RATE = 0.15
+SOURCE_REFRESH_INTERVAL = 30
+SOURCE_FRONTIER_FILE = CONFIG_DIR / "source-frontier.json"
+SOURCE_FRONTIER_LOCK = CONFIG_DIR / "source-frontier.lock"
+SOURCE_FRONTIER_VERSION = 2
+SOURCE_CRAWL_SLICE = 8
 LIBRARY_DIR = Path.home() / "Pictures" / "Wallpapers" / "Live"
 LEGACY_LIBRARY_DIR = Path.home() / "Pictures" / "wallpapers"
 CONTROLLER = Path.home() / ".local" / "lib" / "mpvpaper-engine" / "mpvpaper-enginectl.py"
+V2_INSTALLER = Path(os.environ.get(
+    "DEBIAN_V2_INSTALLER", Path.home() / "Debian-Hyprland-Custom" / "install-v2.sh"
+))
+V2_THEME_MANIFEST = V2_INSTALLER.parent / "config" / "v2" / "themes.tsv"
 SDDM_INSTALLER = Path.home() / ".local" / "lib" / "mpvpaper-engine" / "install-sddm-background.sh"
 LOCAL_YTDLP = Path.home() / ".local" / "bin" / "yt-dlp"
 DEFAULT_CONFIG = {
@@ -47,10 +63,9 @@ WALLPAPER_SOURCES = {
     "YouTube · TeshiiSan": "https://www.youtube.com/@TeshiiSan/videos",
     "MotionBGS": "https://motionbgs.com/",
     "MoeWalls": "https://moewalls.com/",
-    "VSThemes": "https://vsthemes.org/en/wallpapers/page/4/",
+    "VSThemes": "https://vsthemes.org/en/wallpapers/",
 }
 DEFAULT_SUGGESTIONS = (
-    ("https://steamcommunity.com/workshop/browse?appid=431960", "Tendances Wallpaper Engine Workshop", "steamcommunity.com", "workshop trending community"),
     ("https://steamcommunity.com/sharedfiles/filedetails/?id=2704773569", "[4K] CITRUS - go to class", "steamcommunity.com", "anime scene 4k popular"),
     ("https://steamcommunity.com/sharedfiles/filedetails/?id=1579461169", "Top 50 New Wallpapers", "steamcommunity.com", "collection popular community"),
     ("https://motionbgs.com/brain-interface", "Brain Interface Live Wallpaper", "motionbgs.com", "technology sci-fi minimal"),
@@ -63,22 +78,20 @@ DEFAULT_SUGGESTIONS = (
     ("https://moewalls.com/lifestyle/lofi-house-cloudy-day-live-wallpaper/", "Lofi House Cloudy Day Live Wallpaper", "moewalls.com", "lofi landscape peaceful"),
     ("https://moewalls.com/anime/flowers-water-stream-ghibli-live-wallpaper/", "Flowers Water Stream Ghibli Live Wallpaper", "moewalls.com", "anime nature ghibli"),
     ("https://moewalls.com/lifestyle/chillout-beach-live-wallpaper/", "Chillout Beach Live Wallpaper", "moewalls.com", "beach water tropical"),
-    ("https://vsthemes.org/en/wallpapers/page/4/", "Sélection animée VSThemes - page 4", "vsthemes.org", "collection animated discovery"),
-    ("https://vsthemes.org/en/wallpapers/", "Nouveautés animées VSThemes", "vsthemes.org", "collection new discovery"),
+)
+LEGACY_CATALOG_PAGES = (
+    "https://vsthemes.org/en/wallpapers/page/4/",
 )
 YOUTUBE_FEATURED = (
-    ("https://www.youtube.com/watch?v=fmN1RaWO9lc", "Furina Sentadão!", "youtube.com",
-     "teshiisan furina genshin popular", 249018, 13230),
-    ("https://www.youtube.com/watch?v=DEMaBg779gs", "Sandrone Sentadão!", "youtube.com",
-     "teshiisan sandrone genshin popular", 215998, 15038),
+    ("https://www.youtube.com/watch?v=Z1TlGcjJWNU", "Bounce It Mavuika!", "youtube.com",
+     "teshiilatte mavuika genshin animation dance popular", 6401395, 55177),
+    ("https://www.youtube.com/watch?v=QxKwL_TlmP4", "Furina Funky Chemicals!", "youtube.com",
+     "teshiilatte furina genshin animation dance popular", 1079702, 25593),
 )
-SOURCE_PRIORITY = {
-    "steamcommunity.com": 0,
-    "youtube.com": 1,
-    "motionbgs.com": 2,
-    "moewalls.com": 3,
-    "vsthemes.org": 4,
-}
+LEGACY_YOUTUBE_FEATURED = (
+    "https://www.youtube.com/watch?v=fmN1RaWO9lc",
+    "https://www.youtube.com/watch?v=DEMaBg779gs",
+)
 AD_DOMAINS = (
     "doubleclick.net", "googlesyndication.com", "googleadservices.com",
     "adservice.google.com", "amazon-adsystem.com", "adnxs.com", "criteo.com",
@@ -102,6 +115,28 @@ TAG_STOPWORDS = {
 def content_tags(*values):
     words = re.findall(r"[a-z0-9]+", " ".join(values).casefold())
     return sorted({word for word in words if len(word) > 2 and word not in TAG_STOPWORDS})[:16]
+
+
+def content_fingerprint(uri, title=""):
+    parsed = urlparse(uri)
+    query = dict(item.split("=", 1) for item in parsed.query.split("&") if "=" in item)
+    host = parsed.netloc.casefold().removeprefix("www.")
+    if host in {"youtube.com", "m.youtube.com"} and query.get("v"):
+        return "youtube:" + query["v"]
+    if host == "youtu.be" and parsed.path.strip("/"):
+        return "youtube:" + parsed.path.strip("/").split("/", 1)[0]
+    if "steamcommunity.com" in host and query.get("id"):
+        return "steam:" + query["id"]
+    generic = {
+        "live", "wallpaper", "animated", "animation", "video", "background",
+        "fond", "ecran", "4k", "uhd", "hd", "official",
+    }
+    words = [word for word in re.findall(r"[a-z0-9]+", title.casefold())
+             if len(word) > 2 and word not in generic]
+    if words:
+        return "title:" + "-".join(words[:12])
+    canonical_path = re.sub(r"/+", "/", parsed.path.casefold()).rstrip("/")
+    return f"url:{host}{canonical_path}"
 
 
 def is_youtube_url(value):
@@ -144,6 +179,21 @@ def installed_appearance_items(kind):
     return sorted(names, key=str.casefold)
 
 
+def v2_themes():
+    themes = []
+    try:
+        lines = V2_THEME_MANIFEST.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return themes
+    for line in lines:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        fields = line.split("\t")
+        if len(fields) >= 4:
+            themes.append((fields[0], fields[2], fields[3]))
+    return themes
+
+
 def desktop_interface_setting(key, fallback=""):
     try:
         return Gio.Settings.new("org.gnome.desktop.interface").get_string(key)
@@ -179,6 +229,7 @@ class TasteStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(path)
         self.connection.execute("PRAGMA journal_mode=WAL")
+        self.connection.execute("PRAGMA busy_timeout=5000")
         self.connection.execute("PRAGMA cache_size=-2000")
         self.connection.executescript("""
             CREATE TABLE IF NOT EXISTS candidates (
@@ -190,6 +241,13 @@ class TasteStore:
             );
             CREATE TABLE IF NOT EXISTS tag_profile (
                 tag TEXT PRIMARY KEY, weight REAL NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS suggestion_impressions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, uri TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS suggestion_seen (
+                fingerprint TEXT PRIMARY KEY, uri TEXT NOT NULL,
+                seen_at INTEGER NOT NULL
             );
         """)
         columns = {row[1] for row in self.connection.execute("PRAGMA table_info(candidates)")}
@@ -203,7 +261,11 @@ class TasteStore:
             )
         self.connection.executemany(
             "DELETE FROM candidates WHERE uri = ?",
-            ((uri,) for uri in WALLPAPER_SOURCES.values()),
+            ((uri,) for uri in (*WALLPAPER_SOURCES.values(), *LEGACY_CATALOG_PAGES)),
+        )
+        self.connection.executemany(
+            "DELETE FROM candidates WHERE uri = ? AND score <= 0.1 AND views = 0",
+            ((uri,) for uri in LEGACY_YOUTUBE_FEATURED),
         )
         self.connection.executemany(
             """INSERT OR IGNORE INTO candidates
@@ -222,6 +284,18 @@ class TasteStore:
                tags=excluded.tags, external_views=excluded.external_views,
                external_likes=excluded.external_likes""",
             YOUTUBE_FEATURED,
+        )
+        legacy_impressions = self.connection.execute(
+            """SELECT impressions.uri, COALESCE(candidates.title, '')
+               FROM suggestion_impressions AS impressions
+               LEFT JOIN candidates ON candidates.uri = impressions.uri
+               GROUP BY impressions.uri"""
+        ).fetchall()
+        self.connection.executemany(
+            """INSERT OR IGNORE INTO suggestion_seen(fingerprint,uri,seen_at)
+               VALUES(?,?,?)""",
+            ((content_fingerprint(uri, title), uri, int(time.time()))
+             for uri, title in legacy_impressions),
         )
         self.connection.commit()
 
@@ -253,6 +327,34 @@ class TasteStore:
             )
         self.connection.commit()
 
+    def add_candidates(self, candidates):
+        known = {
+            content_fingerprint(uri, title)
+            for uri, title in self.connection.execute("SELECT uri,title FROM candidates")
+        }
+        unique = []
+        for candidate in candidates:
+            fingerprint = content_fingerprint(candidate[0], candidate[1])
+            if fingerprint in known:
+                continue
+            known.add(fingerprint)
+            unique.append(candidate)
+        before = self.connection.total_changes
+        self.connection.executemany(
+            """INSERT OR IGNORE INTO candidates
+               (uri,title,source,tags,score,views,last_seen)
+               VALUES(?,?,?,?,0.1,0,0)""",
+            unique,
+        )
+        self.connection.commit()
+        return self.connection.total_changes - before
+
+    def candidate_count(self):
+        return len({
+            content_fingerprint(uri, title)
+            for uri, title in self.connection.execute("SELECT uri,title FROM candidates")
+        })
+
     def reinforce(self, title, weight):
         for tag in content_tags(title):
             self.connection.execute(
@@ -262,11 +364,26 @@ class TasteStore:
             )
         self.connection.commit()
 
-    def recommendations(self, limit=20):
+    def seen_fingerprints(self):
+        return {row[0] for row in self.connection.execute(
+            "SELECT fingerprint FROM suggestion_seen"
+        )}
+
+    def record_impressions(self, recommendations):
+        now = int(time.time())
+        self.connection.executemany(
+            """INSERT OR IGNORE INTO suggestion_seen(fingerprint,uri,seen_at)
+               VALUES(?,?,?)""",
+            ((content_fingerprint(item[1], item[2]), item[1], now)
+             for item in recommendations),
+        )
+        self.connection.commit()
+
+    def recommendations(self, limit=12, exclude_fingerprints=(), seed_uri=None):
         profile = dict(self.connection.execute("SELECT tag,weight FROM tag_profile"))
         rows = self.connection.execute(
             """SELECT uri,title,source,tags,score,views,last_seen,
-                      external_views,external_likes FROM candidates LIMIT 200"""
+                      external_views,external_likes FROM candidates"""
         ).fetchall()
         scored = []
         for uri, title, source, tags_text, score, views, last_seen, external_views, external_likes in rows:
@@ -281,6 +398,13 @@ class TasteStore:
                      + popularity * 0.5 - views * 0.05)
             scored.append((total, uri, title, source, tags, score, views, popularity,
                            external_views, external_likes))
+        deduplicated = {}
+        for item in scored:
+            fingerprint = content_fingerprint(item[1], item[2])
+            previous = deduplicated.get(fingerprint)
+            if previous is None or item[0] > previous[0]:
+                deduplicated[fingerprint] = item
+        scored = list(deduplicated.values())
         if scored:
             minimum = min(item[0] for item in scored)
             maximum = max(item[0] for item in scored)
@@ -300,33 +424,69 @@ class TasteStore:
                 calibrated.append((total, uri, title, source, tags, rating, confidence,
                                    external_views, external_likes))
             scored = calibrated
-        scored.sort(reverse=True)
-        result, selected_uris = [], set()
-        best_by_source = {}
-        for item in scored:
-            best_by_source.setdefault(item[3], item)
-        source_leaders = sorted(
-            best_by_source.values(),
-            key=lambda item: SOURCE_PRIORITY.get(item[3], 99),
+        blocked = set(exclude_fingerprints).union(self.seen_fingerprints())
+        unseen = [item for item in scored
+                  if content_fingerprint(item[1], item[2]) not in blocked]
+        seed_tags = next((set(item[4]) for item in scored if item[1] == seed_uri), set())
+        known_tags = {tag for tag, weight in profile.items() if weight > 0}
+        return randomized_suggestions(
+            unseen, limit, (), seed_tags, known_tags, EXPLORATION_RATE
         )
-        for item in source_leaders:
-            result.append(item)
-            selected_uris.add(item[1])
-            if len(result) == limit:
-                return result
 
-        category_counts = {}
-        for item in scored:
-            if item[1] in selected_uris:
-                continue
-            category = item[4][0] if item[4] else item[3]
-            if category_counts.get(category, 0) >= 3:
-                continue
-            result.append(item)
-            category_counts[category] = category_counts.get(category, 0) + 1
-            if len(result) == limit:
-                break
-        return result
+
+def randomized_suggestions(primary, limit, fallback=(), seed_tags=(), known_tags=(),
+                           exploration_rate=0.0):
+    """Tirage pondéré sans répétition, avec réutilisation en dernier recours."""
+    generator = random.SystemRandom()
+    result = []
+    seed_tags = set(seed_tags)
+    known_tags = set(known_tags)
+    primary = list(primary)
+    exploration = [item for item in primary if not known_tags.intersection(item[4])]
+    exploration_count = min(len(exploration), max(0, math.ceil(limit * exploration_rate)))
+    if exploration_count:
+        discovered = generator.sample(exploration, exploration_count)
+        result.extend(discovered)
+        primary = [item for item in primary if item not in discovered]
+    for pool in (primary, list(fallback)):
+        while pool and len(result) < limit:
+            floor = min(item[0] for item in pool)
+            weights = [
+                max(0.05, item[0] - floor + 0.15)
+                * (5 ** len(seed_tags.intersection(item[4])))
+                for item in pool
+            ]
+            selected = generator.choices(pool, weights=weights, k=1)[0]
+            result.append(selected)
+            pool.remove(selected)
+    generator.shuffle(result)
+    return result
+
+
+def load_suggestion_history():
+    try:
+        history = json.loads(SUGGESTION_HISTORY_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(history, list):
+        return []
+    return [uri for uri in history if isinstance(uri, str)][-SUGGESTION_COOLDOWN:]
+
+
+def save_suggestion_history(previous, current):
+    history = []
+    for uri in (*previous, *current):
+        if uri in history:
+            history.remove(uri)
+        history.append(uri)
+    history = history[-SUGGESTION_COOLDOWN:]
+    try:
+        RUNTIME_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+        temporary = SUGGESTION_HISTORY_FILE.with_suffix(".tmp")
+        temporary.write_text(json.dumps(history) + "\n", encoding="utf-8")
+        temporary.replace(SUGGESTION_HISTORY_FILE)
+    except OSError:
+        pass
 
 
 class DownloadLinkParser(HTMLParser):
@@ -354,6 +514,299 @@ class PreviewParser(HTMLParser):
         values = dict(attrs)
         if values.get("property") in ("og:image", "twitter:image"):
             self.preview = values.get("content", "")
+
+
+class SourceSuggestionParser(HTMLParser):
+    def __init__(self, base_uri):
+        super().__init__()
+        self.base_uri = base_uri
+        self.candidates = []
+        self.frontier = []
+        self.pending_candidate = None
+        self.pending_text = []
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if tag != "a":
+            if self.pending_candidate is not None and values.get("alt"):
+                self.pending_text.append(values["alt"].strip())
+            return
+        self.finish_pending_candidate()
+        href = urljoin(self.base_uri, values.get("href", ""))
+        parsed = urlparse(href)
+        if not source_uri_is_safe(href):
+            return
+        href = parsed._replace(fragment="").geturl()
+        parsed = urlparse(href)
+        path = parsed.path.casefold()
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        host = source_uri_host(href)
+        base_host = source_uri_host(self.base_uri)
+        same_host = bool(host and host == base_host)
+        base_path = urlparse(self.base_uri).path.casefold()
+        base_query = parse_qs(urlparse(self.base_uri).query, keep_blank_values=True)
+        is_pagination = same_host and is_next_source_page(
+            host, base_path, base_query, path, query
+        )
+        if is_pagination and href.rstrip("/") != self.base_uri.rstrip("/"):
+            self.frontier.append(href)
+        is_candidate = same_host and is_source_candidate(host, path, query)
+        if not is_candidate or href.rstrip("/") == self.base_uri.rstrip("/"):
+            return
+        explicit_title = values.get("title") or values.get("aria-label")
+        title = explicit_title
+        if not title:
+            slug = Path(path.rstrip("/")).name.replace("-", " ").replace("_", " ")
+            title = slug or "Fond d'écran animé"
+        self.candidates.append((href, title[:240]))
+        if not explicit_title:
+            self.pending_candidate = len(self.candidates) - 1
+
+    def handle_data(self, data):
+        if self.pending_candidate is not None and data.strip():
+            self.pending_text.append(data.strip())
+
+    def handle_endtag(self, tag):
+        if tag == "a":
+            self.finish_pending_candidate()
+
+    def close(self):
+        self.finish_pending_candidate()
+        super().close()
+
+    def finish_pending_candidate(self):
+        if self.pending_candidate is None:
+            return
+        text = re.sub(r"\s+", " ", " ".join(self.pending_text)).strip()
+        if text:
+            uri, _fallback = self.candidates[self.pending_candidate]
+            self.candidates[self.pending_candidate] = (uri, text[:240])
+        self.pending_candidate = None
+        self.pending_text = []
+
+
+def source_uri_host(uri):
+    try:
+        parsed = urlparse(uri)
+        port = parsed.port
+    except ValueError:
+        return ""
+    if (parsed.scheme.casefold() != "https" or parsed.username or parsed.password
+            or port not in {None, 443}):
+        return ""
+    return (parsed.hostname or "").casefold().removeprefix("www.")
+
+
+def source_uri_is_safe(uri):
+    return bool(source_uri_host(uri))
+
+
+def single_query_value(query, key, pattern):
+    values = query.get(key, [])
+    return len(values) == 1 and bool(re.fullmatch(pattern, values[0]))
+
+
+def source_page_number(host, path, query):
+    if host == "steamcommunity.com" and re.fullmatch(r"/workshop/browse/?", path):
+        if query.get("appid") != ["431960"]:
+            return None
+        if "p" not in query:
+            return 1
+        return int(query["p"][0]) if single_query_value(query, "p", r"[1-9]\d*") else None
+    patterns = {
+        "motionbgs.com": r"/page/([1-9]\d*)/?",
+        "moewalls.com": r"/page/([1-9]\d*)/?",
+        "vsthemes.org": r"/en/wallpapers/page/([1-9]\d*)/?",
+    }
+    roots = {
+        "motionbgs.com": "/",
+        "moewalls.com": "/",
+        "vsthemes.org": "/en/wallpapers/",
+    }
+    if host in roots and path.rstrip("/") == roots[host].rstrip("/") and not query:
+        return 1
+    match = re.fullmatch(patterns.get(host, r"(?!x)x"), path)
+    return int(match.group(1)) if match and not query else None
+
+
+def is_next_source_page(host, base_path, base_query, path, query):
+    current = source_page_number(host, base_path, base_query)
+    following = source_page_number(host, path, query)
+    return current is not None and following == current + 1
+
+
+def is_source_candidate(host, path, query):
+    if host == "steamcommunity.com":
+        return (bool(re.fullmatch(r"/sharedfiles/filedetails/?", path))
+                and single_query_value(query, "id", r"[1-9]\d*"))
+    if host in {"youtube.com", "m.youtube.com"}:
+        return (bool(re.fullmatch(r"/watch/?", path))
+                and single_query_value(query, "v", r"[A-Za-z0-9_-]{11}"))
+    if host == "motionbgs.com":
+        blocked = {"privacy-policy", "terms-of-use", "contact-us", "about-us"}
+        slug = path.strip("/")
+        return (slug not in blocked
+                and bool(re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)+", slug)))
+    if host == "moewalls.com":
+        return bool(re.fullmatch(r"/[^/]+/[^/]+-live-wallpaper/?", path))
+    if host == "vsthemes.org":
+        return bool(re.fullmatch(
+            r"/en/wallpapers/(?!page(?:/|$))(?:[^/]+/)*[^/]+\.html", path
+        ))
+    return False
+
+
+def fetch_youtube_channel_candidates(source_uri):
+    parsed = urlparse(source_uri)
+    host = source_uri_host(source_uri)
+    if host not in {"youtube.com", "m.youtube.com"} or parsed.path == "/watch":
+        return None
+    command = [
+        str(LOCAL_YTDLP) if LOCAL_YTDLP.is_file() else "yt-dlp",
+        "--flat-playlist", "--dump-json", "--skip-download", "--ignore-errors",
+        source_uri,
+    ]
+    try:
+        result = subprocess.run(
+            command, capture_output=True, text=True, timeout=180, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    candidates = []
+    for line in result.stdout.splitlines():
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        video_id = str(item.get("id") or "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+            continue
+        uri = f"https://www.youtube.com/watch?v={video_id}"
+        title = item.get("title") or "Vidéo YouTube"
+        candidates.append((
+            uri, str(title)[:240], "youtube.com",
+            " ".join(content_tags(str(title), uri)),
+        ))
+    return candidates
+
+
+def fetch_source_candidates(source_uri):
+    youtube_candidates = fetch_youtube_channel_candidates(source_uri)
+    if youtube_candidates:
+        return youtube_candidates, []
+    try:
+        request = Request(source_uri, headers={"User-Agent": "Mozilla/5.0 MPVpaperEngine/1.0"})
+        with urlopen(request, timeout=12) as response:
+            if source_uri_host(response.geturl()) != source_uri_host(source_uri):
+                return None
+            parser = SourceSuggestionParser(source_uri)
+            parser.feed(response.read().decode("utf-8", "replace"))
+            parser.close()
+    except (OSError, ValueError):
+        return None
+    unique = {}
+    for uri, title in parser.candidates:
+        unique.setdefault(uri.split("#", 1)[0], title)
+    candidates = [
+        (uri, title, urlparse(uri).netloc.removeprefix("www.") or "web",
+         " ".join(content_tags(title, uri)))
+        for uri, title in unique.items()
+    ]
+    return candidates, list(dict.fromkeys(parser.frontier))
+
+
+def load_source_frontier():
+    try:
+        data = json.loads(SOURCE_FRONTIER_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    if data.get("version") != SOURCE_FRONTIER_VERSION:
+        return [], set()
+    queue = [uri for uri in data.get("queue", [])
+             if isinstance(uri, str) and source_uri_is_safe(uri)]
+    visited = {uri for uri in data.get("visited", [])
+               if isinstance(uri, str) and source_uri_is_safe(uri)}
+    return queue, visited
+
+
+def save_source_frontier(queue, visited):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    temporary = SOURCE_FRONTIER_FILE.with_suffix(".tmp")
+    temporary.write_text(json.dumps({
+        "version": SOURCE_FRONTIER_VERSION,
+        "queue": queue,
+        "visited": sorted(visited),
+    }) + "\n", encoding="utf-8")
+    temporary.replace(SOURCE_FRONTIER_FILE)
+
+
+def source_host_allowed(uri, allowed_hosts):
+    host = source_uri_host(uri)
+    return bool(host and host in allowed_hosts)
+
+
+def prefetch_suggestions(desired_new=None, page_budget=None):
+    """Étend la réserve sans plafond global.
+
+    ``desired_new`` et ``page_budget`` découpent uniquement le travail d'une passe ;
+    la frontière persistante permet à toutes les passes suivantes de continuer.
+    """
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with SOURCE_FRONTIER_LOCK.open("a+", encoding="utf-8") as lock_stream:
+        fcntl.flock(lock_stream, fcntl.LOCK_EX)
+        store = TasteStore()
+        initial_count = store.candidate_count()
+        queue, visited = load_source_frontier()
+        roots = list(WALLPAPER_SOURCES.values())
+        if not queue:
+            queue = [uri for uri in roots if uri not in visited]
+        if not queue:
+            visited.clear()
+            queue = list(roots)
+        allowed_hosts = {source_uri_host(uri) for uri in roots}
+        pages_read = 0
+        added = 0
+        failed_this_pass = set()
+        while queue:
+            if page_budget is not None and pages_read >= page_budget:
+                break
+            if desired_new is not None and added >= desired_new:
+                break
+            source_uri = queue.pop(0)
+            if source_uri in visited:
+                continue
+            if source_uri in failed_this_pass:
+                queue.append(source_uri)
+                if all(uri in failed_this_pass or uri in visited for uri in queue):
+                    break
+                continue
+            pages_read += 1
+            fetched = fetch_source_candidates(source_uri)
+            if fetched is None:
+                failed_this_pass.add(source_uri)
+                queue.append(source_uri)
+                save_source_frontier(queue, visited)
+                continue
+            visited.add(source_uri)
+            candidates, discovered_pages = fetched
+            candidates = [candidate for candidate in candidates
+                          if source_host_allowed(candidate[0], allowed_hosts)]
+            added += store.add_candidates(candidates)
+            discovered = [*discovered_pages]
+            for uri in discovered:
+                if (source_host_allowed(uri, allowed_hosts)
+                        and uri not in visited and uri not in queue):
+                    queue.append(uri)
+            save_source_frontier(queue, visited)
+        save_source_frontier(queue, visited)
+        count = store.candidate_count()
+        store.connection.close()
+        fcntl.flock(lock_stream, fcntl.LOCK_UN)
+    print(f"Préchargement continu : {count} fiches distinctes "
+          f"({count - initial_count:+d}, {pages_read} pages explorées)")
+    if desired_new is None:
+        return 0
+    return 0 if count - initial_count >= desired_new else 3
 
 
 def page_download_url(uri):
@@ -480,10 +933,11 @@ class SuggestionCard(Gtk.FlowBoxChild):
         super().__init__()
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                           css_classes=["suggestion-card"])
-        picture = Gtk.Picture.new_for_filename(str(thumbnail)) if thumbnail.exists() else Gtk.Picture()
-        picture.set_content_fit(Gtk.ContentFit.COVER)
-        picture.set_size_request(250, 150)
-        content.append(picture)
+        self.picture = (Gtk.Picture.new_for_filename(str(thumbnail))
+                        if thumbnail.exists() else Gtk.Picture())
+        self.picture.set_content_fit(Gtk.ContentFit.COVER)
+        self.picture.set_size_request(250, 150)
+        content.append(self.picture)
         content.append(Gtk.Label(label=title, xalign=0, wrap=True, lines=2,
                                  ellipsize=3, css_classes=["card-title"]))
         content.append(Gtk.Label(label=source, xalign=0, ellipsize=3,
@@ -527,6 +981,18 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.metadata = self.load_metadata()
         self.taste = TasteStore()
         self.suggestion_thumbnail_attempted = set()
+        self.displayed_suggestion_uris = load_suggestion_history()
+        self.suggestion_feed_uris = []
+        self.suggestion_feed_fingerprints = set()
+        self.suggestion_cards = {}
+        self.suggestion_seed_uri = None
+        self.suggestion_loading = False
+        self.suggestion_seed_update_id = None
+        self.source_refreshing = False
+        self.last_source_refresh = 0.0
+        self.source_retry_id = None
+        self.source_retry_delay = SOURCE_REFRESH_INTERVAL
+        self.source_refresh_wanted = 1
         self.selected = Path(self.config["wallpaper"]) if self.config["wallpaper"] else None
         self.cards = []
         LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
@@ -755,11 +1221,58 @@ class MPVpaperWindow(Adw.ApplicationWindow):
                                   css_classes=["suggested-action"])
         apply_button.connect("clicked", self.apply_theme)
         page.append(apply_button)
+
+        page.append(Gtk.Separator(margin_top=12, margin_bottom=2))
+        theme_heading = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        theme_heading.append(Gtk.Label(label="Thèmes Debian V2", xalign=0,
+                                       hexpand=True, css_classes=["title-3"]))
+        self.v2_theme_count = Gtk.Label(label="0 thèmes", xalign=1,
+                                        css_classes=["dim-label"])
+        theme_heading.append(self.v2_theme_count)
+        page.append(theme_heading)
+        theme_search = Gtk.SearchEntry(placeholder_text="Rechercher un thème",
+                                       search_delay=120)
+        theme_search.set_tooltip_text("Filtrer les thèmes Debian V2")
+        page.append(theme_search)
+        theme_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE,
+                                  css_classes=["boxed-list"])
+        theme_list.set_margin_top(2)
+        available_v2_themes = v2_themes()
+        self.v2_theme_rows = []
+        self.v2_theme_count.set_text(f"{len(available_v2_themes)} thèmes")
+        if available_v2_themes:
+            for theme_id, theme_name, mode in available_v2_themes:
+                row = Adw.ActionRow(title=theme_name,
+                                    subtitle=f"{theme_id}  ·  {'Clair' if mode == 'light' else 'Sombre'}")
+                row.theme_search_text = f"{theme_id} {theme_name} {mode}".casefold()
+                row.add_prefix(Gtk.Image.new_from_icon_name("applications-graphics-symbolic"))
+                apply_v2_button = Gtk.Button(label="Appliquer",
+                                             css_classes=["suggested-action"],
+                                             valign=Gtk.Align.CENTER)
+                apply_v2_button.connect(
+                    "clicked", self.apply_v2_theme,
+                    theme_id, theme_name, apply_v2_button,
+                )
+                row.add_suffix(apply_v2_button)
+                theme_list.append(row)
+                self.v2_theme_rows.append(row)
+        else:
+            theme_list.append(Gtk.Label(
+                label="Catalogue V2 introuvable. Vérifiez le chemin du dépôt.",
+                margin_top=12, margin_bottom=12,
+            ))
+        theme_search.connect("search-changed", self.filter_v2_themes)
+        page.append(theme_list)
         self.theme_status = Gtk.Label(label="", xalign=0, wrap=True,
                                       css_classes=["dim-label"])
         page.append(self.theme_status)
         scroll.set_child(page)
         return scroll
+
+    def filter_v2_themes(self, entry):
+        query = entry.get_text().casefold().strip()
+        for row in self.v2_theme_rows:
+            row.set_visible(not query or query in row.theme_search_text)
 
     def apply_theme(self, _button):
         settings = Gio.Settings.new("org.gnome.desktop.interface")
@@ -787,6 +1300,37 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             )
         except GLib.Error as error:
             self.theme_status.set_text(f"Impossible d’appliquer le thème : {error.message}")
+
+    def apply_v2_theme(self, _button, theme_id, theme_name, button):
+        if not V2_INSTALLER.is_file():
+            self.theme_status.set_text(
+                f"Installateur V2 introuvable : {V2_INSTALLER}"
+            )
+            return
+        button.set_sensitive(False)
+        self.theme_status.set_text(f"Application du thème V2 {theme_name}…")
+
+        def worker():
+            result = subprocess.run(
+                ["bash", str(V2_INSTALLER), "theme", "apply", theme_id],
+                capture_output=True, text=True, check=False,
+            )
+            GLib.idle_add(self.v2_theme_finished, result, theme_name, button)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def v2_theme_finished(self, result, theme_name, button):
+        button.set_sensitive(True)
+        if result.returncode == 0:
+            self.theme_status.set_text(
+                f"Thème V2 {theme_name} appliqué. Hyprland a été rechargé."
+            )
+        else:
+            detail = result.stderr.strip().splitlines()
+            self.theme_status.set_text(
+                detail[-1] if detail else f"Impossible d’appliquer {theme_name}."
+            )
+        return False
 
     def compile_adblock_filter(self):
         rules = [
@@ -837,7 +1381,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         heading.append(refresh)
         page.append(heading)
         self.suggestion_hint = Gtk.Label(
-            label="Les suggestions évoluent avec vos visites, téléchargements et fonds appliqués.",
+            label="Mode Pinterest · faites défiler pour charger automatiquement la suite.",
             xalign=0, wrap=True, css_classes=["dim-label"],
         )
         page.append(self.suggestion_hint)
@@ -847,6 +1391,11 @@ class MPVpaperWindow(Adw.ApplicationWindow):
                                            min_children_per_line=2, max_children_per_line=4)
         self.suggestion_flow.set_valign(Gtk.Align.START)
         scroll.set_child(self.suggestion_flow)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_kinetic_scrolling(True)
+        scroll.connect("edge-reached", self.suggestion_edge_reached)
+        scroll.get_vadjustment().connect("value-changed", self.suggestion_scroll_changed)
+        self.suggestion_scroll = scroll
         page.append(scroll)
         return page
 
@@ -857,14 +1406,91 @@ class MPVpaperWindow(Adw.ApplicationWindow):
     def refresh_suggestions(self):
         while child := self.suggestion_flow.get_first_child():
             self.suggestion_flow.remove(child)
-        recommendations = self.taste.recommendations()
-        if not recommendations:
-            self.suggestion_hint.set_text(
-                "Parcourez quelques fonds dans Découvrir pour initialiser vos suggestions."
+        self.suggestion_feed_uris = []
+        self.suggestion_feed_fingerprints = set()
+        self.suggestion_cards = {}
+        self.load_more_suggestions()
+
+    def suggestion_edge_reached(self, _scroll, position):
+        if position == Gtk.PositionType.BOTTOM:
+            self.schedule_more_suggestions()
+
+    def suggestion_scroll_changed(self, adjustment):
+        if self.suggestion_seed_update_id is None:
+            self.suggestion_seed_update_id = GLib.timeout_add(
+                120, self.update_visible_suggestion_seed
             )
+        remaining = adjustment.get_upper() - (
+            adjustment.get_value() + adjustment.get_page_size()
+        )
+        if remaining <= 360:
+            self.schedule_more_suggestions()
+
+    def update_visible_suggestion_seed(self):
+        adjustment = self.suggestion_scroll.get_vadjustment()
+        center_x = self.suggestion_scroll.get_allocated_width() // 2
+        center_y = int(adjustment.get_value() + adjustment.get_page_size() / 2)
+        child = self.suggestion_flow.get_child_at_pos(center_x, center_y)
+        if child is not None and hasattr(child, "suggestion_uri"):
+            self.suggestion_seed_uri = child.suggestion_uri
+        self.suggestion_seed_update_id = None
+        return False
+
+    def schedule_more_suggestions(self):
+        if self.suggestion_loading:
+            return
+        self.suggestion_loading = True
+        GLib.idle_add(self.load_suggestion_batch)
+
+    def load_suggestion_batch(self):
+        try:
+            self.load_more_suggestions()
+        finally:
+            self.suggestion_loading = False
+        return False
+
+    def suggestion_batch_size(self):
+        width = max(1, self.suggestion_scroll.get_allocated_width())
+        height = max(1, int(self.suggestion_scroll.get_vadjustment().get_page_size()))
+        columns = max(2, min(4, width // 280))
+        rows = max(1, math.ceil((height + 360) / 220))
+        return columns * rows
+
+    def load_more_suggestions(self):
+        batch_size = self.suggestion_batch_size()
+        recommendations = self.taste.recommendations(
+            limit=batch_size,
+            exclude_fingerprints=self.suggestion_feed_fingerprints,
+            seed_uri=self.suggestion_seed_uri,
+        )
+        if not recommendations:
+            if self.refresh_suggestion_sources():
+                return
+        recommendations = [
+            item for item in recommendations
+            if content_fingerprint(item[1], item[2]) not in self.suggestion_feed_fingerprints
+        ]
+        current_uris = [item[1] for item in recommendations]
+        self.taste.record_impressions(recommendations)
+        save_suggestion_history(self.displayed_suggestion_uris, current_uris)
+        self.displayed_suggestion_uris = load_suggestion_history()
+        self.suggestion_feed_uris.extend(current_uris)
+        self.suggestion_feed_fingerprints.update(
+            content_fingerprint(item[1], item[2]) for item in recommendations
+        )
+        if not recommendations:
+            if not self.suggestion_feed_uris:
+                self.suggestion_hint.set_text(
+                    "Parcourez quelques fonds dans Découvrir pour initialiser vos suggestions."
+                )
+            else:
+                self.suggestion_hint.set_text(
+                    "Recherche automatique de nouveaux contenus…"
+                )
+                self.schedule_suggestion_source_retry()
             return
         self.suggestion_hint.set_text(
-            f"{len(recommendations)} résultats classés localement et diversifiés par style."
+            "Flux continu personnalisé · faites défiler pour charger la suite."
         )
         missing = []
         for (score, uri, title, source, tags, rating, confidence,
@@ -876,26 +1502,91 @@ class MPVpaperWindow(Adw.ApplicationWindow):
                 lambda _button, target=uri: self.open_suggestion(_button, target),
                 lambda _button, target=uri, label=title: self.favorite_suggestion(target, label),
             )
+            card.suggestion_uri = uri
             self.suggestion_flow.append(card)
+            self.suggestion_cards.setdefault(uri, []).append(card)
             if not thumbnail.exists() and uri not in self.suggestion_thumbnail_attempted:
                 self.suggestion_thumbnail_attempted.add(uri)
                 missing.append((uri, thumbnail))
         if missing:
             threading.Thread(target=self.generate_suggestion_thumbnails,
                              args=(missing,), daemon=True).start()
+        GLib.idle_add(self.ensure_suggestion_feed_filled)
+
+    def refresh_suggestion_sources(self):
+        now = time.monotonic()
+        if self.source_refreshing:
+            return True
+        elapsed = now - self.last_source_refresh
+        if elapsed < SOURCE_REFRESH_INTERVAL:
+            self.schedule_suggestion_source_retry(
+                max(1, math.ceil(SOURCE_REFRESH_INTERVAL - elapsed))
+            )
+            return True
+        self.source_refreshing = True
+        self.last_source_refresh = now
+        self.source_refresh_before = self.taste.candidate_count()
+        self.source_refresh_wanted = max(1, self.suggestion_batch_size())
+        self.suggestion_hint.set_text("Recherche de nouvelles propositions dans les sources…")
+        threading.Thread(target=self.fetch_suggestion_sources, daemon=True).start()
+        return True
+
+    def fetch_suggestion_sources(self):
+        prefetch_suggestions(desired_new=self.source_refresh_wanted)
+        GLib.idle_add(self.suggestion_sources_ready)
+
+    def suggestion_sources_ready(self):
+        added = self.taste.candidate_count() - self.source_refresh_before
+        self.source_refreshing = False
+        if added:
+            self.source_retry_delay = SOURCE_REFRESH_INTERVAL
+            self.suggestion_hint.set_text(f"{added} nouvelles propositions trouvées.")
+            self.schedule_more_suggestions()
+        else:
+            self.suggestion_hint.set_text(
+                "Sources à jour · nouvelle exploration automatique en arrière-plan."
+            )
+            self.schedule_suggestion_source_retry(self.source_retry_delay)
+            self.source_retry_delay = min(self.source_retry_delay * 2, 300)
+        return False
+
+    def schedule_suggestion_source_retry(self, delay=None):
+        if self.source_retry_id is not None:
+            return
+        self.source_retry_id = GLib.timeout_add_seconds(
+            max(1, int(delay or self.source_retry_delay)),
+            self.retry_suggestion_sources,
+        )
+
+    def retry_suggestion_sources(self):
+        self.source_retry_id = None
+        self.last_source_refresh = 0.0
+        self.schedule_more_suggestions()
+        return False
+
+    def ensure_suggestion_feed_filled(self):
+        adjustment = self.suggestion_scroll.get_vadjustment()
+        if adjustment.get_upper() <= adjustment.get_page_size() + 360:
+            self.schedule_more_suggestions()
+        return False
 
     def generate_suggestion_thumbnails(self, items):
-        changed = False
         for uri, destination in items:
-            changed = fetch_suggestion_thumbnail(uri, destination) or changed
-        if changed:
-            GLib.idle_add(self.refresh_suggestions)
+            if fetch_suggestion_thumbnail(uri, destination):
+                GLib.idle_add(self.suggestion_thumbnail_ready, uri, destination)
+
+    def suggestion_thumbnail_ready(self, uri, destination):
+        for card in self.suggestion_cards.get(uri, []):
+            card.picture.set_filename(str(destination))
+        return False
 
     def favorite_suggestion(self, uri, title):
         self.taste.record(uri, title, 4.0, candidate=True)
+        self.suggestion_seed_uri = uri
         self.refresh_suggestions()
 
     def open_suggestion(self, _button, uri):
+        self.suggestion_seed_uri = uri
         self.views.set_visible_child_name("discover")
         self.web_view.load_uri(uri)
 
@@ -1316,6 +2007,23 @@ class MPVpaperApplication(Adw.Application):
         window = self.props.active_window or MPVpaperWindow(self)
         window.present()
 
+    def do_shutdown(self):
+        subprocess.run(
+            ["systemctl", "--user", "start", "--no-block",
+             "mpvpaper-engine-prefetch.service"],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        Adw.Application.do_shutdown(self)
+
 
 if __name__ == "__main__":
+    if len(sys.argv) >= 2 and sys.argv[1] == "--prefetch":
+        desired = int(sys.argv[2]) if len(sys.argv) >= 3 else None
+        raise SystemExit(prefetch_suggestions(
+            desired_new=max(1, desired) if desired is not None else None
+        ))
+    if len(sys.argv) >= 2 and sys.argv[1] == "--prefetch-continuous":
+        raise SystemExit(prefetch_suggestions(page_budget=SOURCE_CRAWL_SLICE))
+    if len(sys.argv) >= 2 and sys.argv[1] == "--prefetch-all":
+        raise SystemExit(prefetch_suggestions())
     raise SystemExit(MPVpaperApplication().run())

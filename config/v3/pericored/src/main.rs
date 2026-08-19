@@ -11,6 +11,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use udev::{Device, Enumerator, EventType, MonitorBuilder};
 
+mod drivers;
+
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 enum DeviceClass {
@@ -25,6 +27,13 @@ enum DeviceClass {
 }
 
 #[derive(Debug, Serialize, Clone)]
+struct BatteryState {
+    percent: Option<u8>,
+    charging: Option<bool>,
+    low: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Clone)]
 struct DeviceRecord {
     id: String,
     class: DeviceClass,
@@ -36,18 +45,23 @@ struct DeviceRecord {
     connected: bool,
     nodes: Vec<String>,
     syspath: String,
+    connection: String,
+    driver: String,
+    capabilities: Vec<String>,
+    battery: BatteryState,
 }
 
 #[derive(Default)]
 struct DeviceRegistry {
     devices: BTreeMap<String, DeviceRecord>,
     nodes: BTreeMap<String, String>,
+    driver_registry: drivers::DriverRegistry,
 }
 
 #[derive(Debug, Deserialize)]
 struct Request {
     method: String,
-    id: Option<String>,
+    request_id: Option<String>,
     params: Option<serde_json::Value>,
 }
 
@@ -104,6 +118,45 @@ fn classify(device: &Device) -> DeviceClass {
     }
 }
 
+fn connection(device: &Device) -> String {
+    value(device, "ID_BUS")
+        .or_else(|| value(device, "DEVTYPE"))
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn driver_for(class: &DeviceClass, device: &Device) -> &'static str {
+    if matches!(
+        class,
+        DeviceClass::Hid | DeviceClass::Keyboard | DeviceClass::Mouse
+    ) {
+        if device.devnode().is_some() {
+            return "generic-hid";
+        }
+    }
+    "read-only"
+}
+
+fn capabilities_for(class: &DeviceClass, device: &Device) -> Vec<String> {
+    let mut capabilities = vec!["device.info".to_string()];
+    match class {
+        DeviceClass::Keyboard => capabilities.push("keyboard.buttons".to_string()),
+        DeviceClass::Mouse => capabilities.push("mouse.buttons".to_string()),
+        DeviceClass::Gamepad => capabilities.push("gamepad.axes".to_string()),
+        DeviceClass::Hid => capabilities.push("hid.inspect".to_string()),
+        DeviceClass::Monitor => capabilities.push("display.info".to_string()),
+        _ => {}
+    }
+    if device.devnode().is_some()
+        && matches!(
+            class,
+            DeviceClass::Hid | DeviceClass::Mouse | DeviceClass::Keyboard
+        )
+    {
+        capabilities.push("hid.report_descriptor".to_string());
+    }
+    capabilities
+}
+
 fn record_from_device(device: &Device) -> Option<DeviceRecord> {
     let subsystem = device.subsystem().and_then(|value| value.to_str())?;
     if !matches!(subsystem, "input" | "hidraw" | "drm" | "pci") {
@@ -112,6 +165,7 @@ fn record_from_device(device: &Device) -> Option<DeviceRecord> {
     let vendor_id = value(device, "ID_VENDOR_ID").or_else(|| value(device, "idVendor"));
     let product_id = value(device, "ID_MODEL_ID").or_else(|| value(device, "idProduct"));
     let id = stable_id(device, &vendor_id, &product_id);
+    let class = classify(device);
     let name = value(device, "NAME")
         .or_else(|| value(device, "ID_MODEL_FROM_DATABASE"))
         .or_else(|| value(device, "ID_MODEL"))
@@ -120,7 +174,7 @@ fn record_from_device(device: &Device) -> Option<DeviceRecord> {
     let node = devnode(device).unwrap_or_else(|| syspath.clone());
     Some(DeviceRecord {
         id,
-        class: classify(device),
+        class: class.clone(),
         name,
         manufacturer: value(device, "ID_VENDOR_FROM_DATABASE")
             .or_else(|| value(device, "ID_VENDOR")),
@@ -130,11 +184,33 @@ fn record_from_device(device: &Device) -> Option<DeviceRecord> {
         connected: true,
         nodes: vec![node],
         syspath,
+        connection: connection(device),
+        driver: driver_for(&class, device).to_string(),
+        capabilities: capabilities_for(&class, device),
+        battery: BatteryState {
+            percent: None,
+            charging: None,
+            low: None,
+        },
     })
 }
 
 impl DeviceRegistry {
     fn add(&mut self, record: DeviceRecord) {
+        let mut record = record;
+        let driver = self.driver_registry.select(&record);
+        record.driver = driver.name().to_string();
+        record.capabilities = driver
+            .capabilities(&record)
+            .into_iter()
+            .map(|capability| {
+                if capability.writable {
+                    format!("{}.write", capability.name)
+                } else {
+                    capability.name.to_string()
+                }
+            })
+            .collect();
         let id = record.id.clone();
         for node in &record.nodes {
             self.nodes.insert(node.clone(), id.clone());
@@ -143,6 +219,10 @@ impl DeviceRegistry {
             existing.connected = true;
             existing.class = record.class;
             existing.name = record.name;
+            existing.connection = record.connection;
+            existing.driver = record.driver;
+            existing.capabilities = record.capabilities;
+            existing.battery = record.battery;
             for node in record.nodes {
                 if !existing.nodes.contains(&node) {
                     existing.nodes.push(node);
@@ -192,22 +272,40 @@ fn socket_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/tmp/periphx-pericored.sock"))
 }
 
-fn response(id: Option<String>, result: serde_json::Value) -> serde_json::Value {
-    serde_json::json!({"id": id, "ok": true, "result": result})
+fn response(request_id: Option<String>, result: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({"ok": true, "request_id": request_id, "result": result, "error": null})
 }
 
-fn error_response(id: Option<String>, message: &str) -> serde_json::Value {
-    serde_json::json!({"id": id, "ok": false, "error": message})
+fn error_response(request_id: Option<String>, code: &str, message: &str) -> serde_json::Value {
+    serde_json::json!({
+        "ok": false,
+        "request_id": request_id,
+        "result": null,
+        "error": {"code": code, "message": message}
+    })
 }
 
 fn handle_request(request: Request, registry: &SharedRegistry) -> serde_json::Value {
     let guard = match registry.lock() {
         Ok(guard) => guard,
-        Err(_) => return error_response(request.id, "registry unavailable"),
+        Err(_) => {
+            return error_response(
+                request.request_id,
+                "registry_unavailable",
+                "registry unavailable",
+            )
+        }
     };
     match request.method.as_str() {
-        "ListDevices" | "inventory" => response(request.id, guard.inventory_json("ipc")),
-        "GetDevice" => {
+        "Ping" | "ping" => response(request.request_id, serde_json::json!({"pong": true})),
+        "Version" | "version" => response(
+            request.request_id,
+            serde_json::json!({"api": "0.2", "daemon": "0.1.0"}),
+        ),
+        "ListDevices" | "list_devices" | "inventory" => {
+            response(request.request_id, guard.inventory_json("ipc"))
+        }
+        "GetDevice" | "get_device" => {
             let device_id = request
                 .params
                 .as_ref()
@@ -215,25 +313,54 @@ fn handle_request(request: Request, registry: &SharedRegistry) -> serde_json::Va
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or_default();
             match guard.device(device_id) {
-                Some(device) => response(request.id, serde_json::json!(device)),
-                None => error_response(request.id, "device not found"),
+                Some(device) => response(request.request_id, serde_json::json!(device)),
+                None => error_response(request.request_id, "not_found", "device not found"),
             }
         }
-        "GetCapabilities" => response(
-            request.id,
+        "GetCapabilities" | "get_capabilities" => response(
+            request.request_id,
             serde_json::json!({
                 "device_count": guard.devices.values().filter(|device| device.connected).count(),
-                "supported": ["inventory", "device-details", "hotplug-events"],
+                "supported": ["ping", "version", "list_devices", "get_device", "get_capabilities", "get_state", "inspect", "set_property", "apply_profile"],
+                "drivers": ["generic-hid", "read-only"],
             }),
         ),
-        "GetBattery" | "GetConnection" | "GetProfile" => response(
-            request.id,
-            serde_json::json!({
-                "status": "not-implemented",
-                "message": "backend not available for this device",
-            }),
+        "GetState" | "get_state" => {
+            let device_id = request
+                .params
+                .as_ref()
+                .and_then(|params| params.get("id"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            match guard.device(device_id) {
+                Some(device) => response(
+                    request.request_id,
+                    serde_json::json!({"connection": device.connection, "battery": device.battery, "capabilities": device.capabilities}),
+                ),
+                None => error_response(request.request_id, "not_found", "device not found"),
+            }
+        }
+        "Inspect" | "inspect" => {
+            let device_id = request
+                .params
+                .as_ref()
+                .and_then(|params| params.get("id"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            match guard.device(device_id) {
+                Some(device) => response(
+                    request.request_id,
+                    serde_json::json!({"device": device, "hid": {"nodes": device.nodes, "usage_pages": [], "writable_protocol": "unknown"}}),
+                ),
+                None => error_response(request.request_id, "not_found", "device not found"),
+            }
+        }
+        "SetProperty" | "set_property" | "ApplyProfile" | "apply_profile" => error_response(
+            request.request_id,
+            "unsupported_capability",
+            "no writable driver is registered for this device",
         ),
-        _ => error_response(request.id, "unknown method"),
+        _ => error_response(request.request_id, "unknown_method", "unknown method"),
     }
 }
 
@@ -243,7 +370,11 @@ fn serve_client(mut stream: UnixStream, registry: SharedRegistry) -> Result<()> 
         let line = line?;
         let result = match serde_json::from_str::<Request>(&line) {
             Ok(request) => handle_request(request, &registry),
-            Err(error) => error_response(None, &format!("invalid request: {error}")),
+            Err(error) => error_response(
+                None,
+                "invalid_request",
+                &format!("invalid request: {error}"),
+            ),
         };
         writeln!(stream, "{}", serde_json::to_string(&result)?)?;
         stream.flush()?;

@@ -26,7 +26,7 @@ def pericored_inventory():
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(1)
             client.connect(socket_path)
-            client.sendall(b'{"method":"ListDevices"}\n')
+            client.sendall(b'{"method":"list_devices","request_id":"gui"}\n')
             response = client.makefile("rb").readline()
         payload = json.loads(response)
         if payload.get("ok"):

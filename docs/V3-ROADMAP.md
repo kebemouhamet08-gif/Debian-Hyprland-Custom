@@ -48,6 +48,16 @@ propriétaires ne sont jamais envoyées sans backend identifié.
 - détection des changements branchement/débranchement via udev.
 - détection des appareils Bluetooth via BlueZ et `bluetoothctl`.
 
+### 3.2 Fondation PeriphX
+
+- [x] daemon `pericored` avec protocole IPC JSONL versionné (`ping`, `version`,
+  inventaire, état, inspection) ;
+- [x] modèle `Device` enrichi avec connexion, driver, capabilities et batterie ;
+- [x] registre de drivers avec `generic-hid` prioritaire et fallback lecture seule ;
+- [x] CLI `periphx inspect` sans envoi de reports propriétaires ;
+- [ ] descripteurs HID décodés et fixtures de périphériques ;
+- [ ] premier driver matériel avec opérations d écriture validées.
+
 ### 4. Thèmes et couleurs
 
 - format de thème V3 commun ;

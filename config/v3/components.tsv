@@ -3,6 +3,8 @@ hyprland	runtime	requis	Hyprland|hyprctl	compositeur Wayland
 periphx	interface	prototype	periphx	centre de contrôle GTK et client CLI
 pericored	service	actif	pericored	daemon Rust udev avec API IPC Unix read-only
 periphx-cli	interface	actif	periphx list|info|capabilities	client CLI de l API pericored
+driver-api	service	actif	generic-hid	registre de drivers et capabilities read-only
+device-inspector	interface	actif	periphx inspect	inspection HID sans écriture propriétaire
 shell-v3	interface	planifie	-	interface principale V3
 theme-engine	service	planifie	-	activation atomique des thèmes
 wallpaper-engine	option	disponible	mpvpaper-enginectl	fonds fixes et vidéo

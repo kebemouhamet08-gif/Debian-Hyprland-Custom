@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=PeriphX
+Comment=Gérer les périphériques USB, HID, écrans et manettes
+Exec=periphx
+Icon=preferences-desktop-peripherals
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=keyboard;mouse;monitor;gamepad;usb;rgb;
+StartupNotify=true

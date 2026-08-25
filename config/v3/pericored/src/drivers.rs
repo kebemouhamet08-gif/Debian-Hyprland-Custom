@@ -21,11 +21,10 @@ impl DeviceDriver for GenericHidDriver {
 
     fn probe(&self, device: &DeviceRecord) -> bool {
         device.connected
-            && !device.nodes.is_empty()
-            && matches!(
-                device.class,
-                DeviceClass::Hid | DeviceClass::Keyboard | DeviceClass::Mouse
-            )
+            && device
+                .nodes
+                .iter()
+                .any(|node| node.starts_with("/dev/hidraw"))
     }
 
     fn capabilities(&self, device: &DeviceRecord) -> Vec<Capability> {
@@ -33,16 +32,57 @@ impl DeviceDriver for GenericHidDriver {
             name: "device.info",
             writable: false,
         }];
-        if matches!(
-            device.class,
-            DeviceClass::Hid | DeviceClass::Keyboard | DeviceClass::Mouse
-        ) {
-            capabilities.push(Capability {
-                name: "hid.inspect",
-                writable: false,
-            });
-        }
+        capabilities.push(Capability {
+            name: "hid.inspect",
+            writable: false,
+        });
+        capabilities.push(Capability {
+            name: "hid.report_descriptor",
+            writable: false,
+        });
+        add_input_capability(&mut capabilities, &device.class);
         capabilities
+    }
+}
+
+pub struct GenericInputDriver;
+
+impl DeviceDriver for GenericInputDriver {
+    fn name(&self) -> &'static str {
+        "generic-input"
+    }
+
+    fn probe(&self, device: &DeviceRecord) -> bool {
+        device.connected
+            && device
+                .nodes
+                .iter()
+                .any(|node| node.starts_with("/dev/input/event"))
+    }
+
+    fn capabilities(&self, device: &DeviceRecord) -> Vec<Capability> {
+        let mut capabilities = vec![Capability {
+            name: "device.info",
+            writable: false,
+        }];
+        add_input_capability(&mut capabilities, &device.class);
+        capabilities
+    }
+}
+
+fn add_input_capability(capabilities: &mut Vec<Capability>, class: &DeviceClass) {
+    let name = match class {
+        DeviceClass::Keyboard => Some("keyboard.buttons"),
+        DeviceClass::Mouse => Some("mouse.buttons"),
+        DeviceClass::Touchpad => Some("touchpad.gestures"),
+        DeviceClass::Gamepad => Some("gamepad.axes"),
+        _ => None,
+    };
+    if let Some(name) = name {
+        capabilities.push(Capability {
+            name,
+            writable: false,
+        });
     }
 }
 
@@ -72,7 +112,11 @@ pub struct DriverRegistry {
 impl Default for DriverRegistry {
     fn default() -> Self {
         Self {
-            drivers: vec![Box::new(GenericHidDriver), Box::new(ReadOnlyDriver)],
+            drivers: vec![
+                Box::new(GenericHidDriver),
+                Box::new(GenericInputDriver),
+                Box::new(ReadOnlyDriver),
+            ],
         }
     }
 }

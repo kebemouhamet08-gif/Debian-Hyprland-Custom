@@ -55,7 +55,7 @@ propriétaires ne sont jamais envoyées sans backend identifié.
 - [x] modèle `Device` enrichi avec connexion, driver, capabilities et batterie ;
 - [x] registre de drivers avec `generic-hid` prioritaire et fallback lecture seule ;
 - [x] CLI `periphx inspect` sans envoi de reports propriétaires ;
-- [ ] descripteurs HID décodés et fixtures de périphériques ;
+- [x] descripteurs HID décodés, empreinte SHA-256, interfaces physiques et tests ;
 - [ ] premier driver matériel avec opérations d écriture validées.
 
 ### 4. Thèmes et couleurs

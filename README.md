@@ -55,6 +55,11 @@ par Debian. Les capacités DDC/CI, OpenRGB, evdev/uinput et les profils sont
 indiqués séparément ; un périphérique propriétaire ne sera pas piloté sans backend
 compatible ni permission explicite.
 
+`pericored` agrège les nœuds `event`, `mouse` et `hidraw` par périphérique physique.
+Son pilote HID générique décode chaque interface et son descripteur, calcule une
+empreinte SHA-256 et reste strictement en lecture seule tant qu'aucun pilote validé
+n'est associé au VID/PID concerné.
+
 ### Prérequis v2
 
 - une session Hyprland fonctionnelle ;

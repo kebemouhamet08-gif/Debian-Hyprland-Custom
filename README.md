@@ -50,6 +50,14 @@ export PATH="$HOME/.local/bin:$PATH"
 periphx
 ```
 
+La CLI expose l'inventaire et l'inspection détaillée sans écrire vers le matériel :
+
+```bash
+periphx-cli list
+periphx-cli inspect DEVICE_ID
+periphx-cli interfaces DEVICE_ID
+```
+
 Il affiche les périphériques USB/HID, Bluetooth, claviers, souris, écrans et manettes détectés
 par Debian. Les capacités DDC/CI, OpenRGB, evdev/uinput et les profils sont
 indiqués séparément ; un périphérique propriétaire ne sera pas piloté sans backend

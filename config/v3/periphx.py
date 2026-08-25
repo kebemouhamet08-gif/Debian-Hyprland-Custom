@@ -11,10 +11,11 @@ from pathlib import Path
 
 
 def socket_path():
-    return os.environ.get(
-        "PERIPHX_SOCKET",
-        os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "periphx", "pericored.sock"),
-    )
+    if configured := os.environ.get("PERIPHX_SOCKET"):
+        return configured
+    if runtime_dir := os.environ.get("XDG_RUNTIME_DIR"):
+        return os.path.join(runtime_dir, "periphx", "pericored.sock")
+    return "/tmp/periphx-pericored.sock"
 
 
 def request(method, params=None, request_id="cli", timeout=3):
@@ -101,6 +102,8 @@ def custom_driver_directory():
 
 def load_driver_manifest(path):
     path = Path(path)
+    if not path.is_file():
+        raise ValueError("manifest introuvable ou non régulier")
     if path.stat().st_size > 256 * 1024:
         raise ValueError("manifest trop volumineux")
     with path.open(encoding="utf-8") as stream:
@@ -191,7 +194,7 @@ def list_driver_manifests():
     result = []
     if not directory.is_dir():
         return result
-    for path in sorted(directory.glob("*.json")):
+    for path in sorted(item for item in directory.glob("*.json") if item.is_file()):
         try:
             manifest = load_driver_manifest(path)
             result.append({

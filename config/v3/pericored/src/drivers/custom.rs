@@ -146,6 +146,7 @@ pub fn load_directory(path: &Path) -> Vec<CustomReadOnlyDriver> {
     };
     let mut paths: Vec<_> = entries
         .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
         .map(|entry| entry.path())
         .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("json"))
         .collect();

@@ -15,6 +15,18 @@ SPEC.loader.exec_module(PERIPHX)
 
 
 class PeriphxCliTests(unittest.TestCase):
+    def test_socket_fallback_matches_manual_daemon_path(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(PERIPHX.socket_path(), "/tmp/periphx-pericored.sock")
+
+    def test_socket_prefers_explicit_and_runtime_paths(self):
+        with mock.patch.dict("os.environ", {"XDG_RUNTIME_DIR": "/run/user/1000"}, clear=True):
+            self.assertEqual(
+                PERIPHX.socket_path(), "/run/user/1000/periphx/pericored.sock"
+            )
+        with mock.patch.dict("os.environ", {"PERIPHX_SOCKET": "/tmp/custom.sock"}, clear=True):
+            self.assertEqual(PERIPHX.socket_path(), "/tmp/custom.sock")
+
     def test_inspect_supports_nested_descriptor_schema(self):
         result = {
             "device": {

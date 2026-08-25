@@ -45,10 +45,11 @@ def is_external_peripheral(device):
 
 
 def pericored_inventory():
-    socket_path = os.environ.get(
-        "PERIPHX_SOCKET",
-        os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "periphx", "pericored.sock"),
-    )
+    socket_path = os.environ.get("PERIPHX_SOCKET")
+    if not socket_path:
+        runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+        socket_path = os.path.join(runtime_dir, "periphx", "pericored.sock") \
+            if runtime_dir else "/tmp/periphx-pericored.sock"
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(1)

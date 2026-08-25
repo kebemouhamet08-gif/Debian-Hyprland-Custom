@@ -102,7 +102,7 @@ def custom_driver_directory():
 
 def load_driver_manifest(path):
     path = Path(path)
-    if not path.is_file():
+    if path.is_symlink() or not path.is_file():
         raise ValueError("manifest introuvable ou non régulier")
     if path.stat().st_size > 256 * 1024:
         raise ValueError("manifest trop volumineux")
@@ -117,7 +117,9 @@ def load_driver_manifest(path):
         r"[A-Za-z0-9_.-]{3,64}", manifest["name"]
     ):
         raise ValueError("nom de pilote invalide")
-    if not isinstance(manifest["version"], str) or not 0 < len(manifest["version"]) <= 32:
+    if not isinstance(manifest["version"], str) or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9.+_-]{0,31}", manifest["version"]
+    ):
         raise ValueError("version de pilote invalide")
     match = manifest["match"]
     if not isinstance(match, dict) or not set(match).issubset({

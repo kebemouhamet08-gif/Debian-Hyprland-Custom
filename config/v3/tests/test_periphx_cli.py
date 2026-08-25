@@ -159,6 +159,27 @@ class PeriphxCliTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 PERIPHX.load_driver_manifest(source)
 
+    def test_custom_driver_rejects_symlinks_and_control_characters(self):
+        manifest = {
+            "schema_version": 1,
+            "name": "test-mouse",
+            "version": "1.0\nforged",
+            "match": {"vendor_id": "1234", "product_id": "5678"},
+            "capabilities": ["device.info"],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            source = root / "source.json"
+            source.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                PERIPHX.load_driver_manifest(source)
+            manifest["version"] = "1.0.0"
+            source.write_text(json.dumps(manifest), encoding="utf-8")
+            link = root / "linked.json"
+            link.symlink_to(source)
+            with self.assertRaises(ValueError):
+                PERIPHX.load_driver_manifest(link)
+
 
 if __name__ == "__main__":
     unittest.main()

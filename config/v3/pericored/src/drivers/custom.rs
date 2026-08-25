@@ -50,7 +50,12 @@ impl DriverManifest {
         {
             return Err("invalid driver name".to_string());
         }
-        if self.version.is_empty() || self.version.len() > 32 {
+        if self.version.is_empty()
+            || self.version.len() > 32
+            || !self.version.chars().enumerate().all(|(index, item)| {
+                item.is_ascii_alphanumeric() || (index > 0 && matches!(item, '.' | '+' | '_' | '-'))
+            })
+        {
             return Err("invalid driver version".to_string());
         }
         for value in [&self.device_match.vendor_id, &self.device_match.product_id] {
@@ -117,11 +122,12 @@ impl DeviceDriver for CustomReadOnlyDriver {
             }
         }
         if let Some(expected) = &self.manifest.device_match.interface_number {
-            if !device
-                .hid_interfaces
-                .iter()
-                .any(|interface| interface.interface_number.as_deref() == Some(expected.as_str()))
-            {
+            if !device.hid_interfaces.iter().any(|interface| {
+                interface
+                    .interface_number
+                    .as_deref()
+                    .is_some_and(|actual| actual.eq_ignore_ascii_case(expected))
+            }) {
                 return false;
             }
         }
@@ -195,6 +201,15 @@ mod tests {
             "capabilities": ["device.info"]
         }"#;
         assert!(CustomReadOnlyDriver::from_bytes(weak).is_err());
+
+        let forged_version = br#"{
+            "schema_version": 1,
+            "name": "forged-version",
+            "version": "1.0\nforged",
+            "match": {"vendor_id": "1234", "product_id": "5678"},
+            "capabilities": ["device.info"]
+        }"#;
+        assert!(CustomReadOnlyDriver::from_bytes(forged_version).is_err());
     }
 
     #[test]

@@ -100,6 +100,18 @@ class DeviceCenterTests(unittest.TestCase):
         device = {"nodes": ["/dev/hidraw1", "/dev/input/event20", "/dev/input/mouse4"]}
         self.assertEqual(DEVICE_CENTER.event_nodes(device), ["/dev/input/event20"])
 
+    def test_normalized_daemon_events_need_no_linux_code_mapping(self):
+        event = {
+            "kind": "axis",
+            "control": "gamepad.stick.left.x",
+            "raw_value": 16384,
+            "normalized_value": 0.5,
+        }
+        self.assertEqual(
+            DEVICE_CENTER.normalized_event_text(event),
+            "X · +0.500 (brut 16384)",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

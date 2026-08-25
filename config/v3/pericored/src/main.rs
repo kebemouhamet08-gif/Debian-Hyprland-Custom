@@ -7,6 +7,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -14,6 +15,7 @@ use udev::{Device, Enumerator, EventType, MonitorBuilder};
 
 mod drivers;
 mod hid;
+mod input;
 mod monitor;
 
 const MAX_IPC_REQUEST_BYTES: u64 = 256 * 1024;
@@ -78,6 +80,7 @@ struct Request {
 }
 
 type SharedRegistry = Arc<Mutex<DeviceRegistry>>;
+type InputSessions = Arc<Mutex<BTreeMap<String, Arc<AtomicBool>>>>;
 
 fn value(device: &Device, key: &str) -> Option<String> {
     device
@@ -479,7 +482,11 @@ fn read_ipc_line<R: BufRead>(reader: &mut R) -> std::io::Result<Option<Vec<u8>>>
     Ok((bytes_read != 0).then_some(line))
 }
 
-fn handle_request(request: Request, registry: &SharedRegistry) -> serde_json::Value {
+fn handle_request(
+    request: Request,
+    registry: &SharedRegistry,
+    sessions: &InputSessions,
+) -> serde_json::Value {
     if matches!(
         request.method.as_str(),
         "MonitorHid" | "monitor_hid" | "MonitorHidAll" | "monitor_hid_all"
@@ -521,7 +528,7 @@ fn handle_request(request: Request, registry: &SharedRegistry) -> serde_json::Va
             request.request_id,
             serde_json::json!({
                 "device_count": guard.devices.values().filter(|device| device.connected).count(),
-                "supported": ["ping", "version", "list_devices", "get_device", "get_capabilities", "get_state", "inspect", "get_hid_interfaces", "monitor_hid", "monitor_hid_all", "reload_drivers", "set_property", "apply_profile"],
+                "supported": ["ping", "version", "list_devices", "get_device", "get_capabilities", "get_state", "inspect", "get_hid_interfaces", "monitor_hid", "monitor_hid_all", "get_input_capabilities", "start_input_test", "stop_input_test", "reload_drivers", "set_property", "apply_profile"],
                 "drivers": guard.driver_registry.names(),
             }),
         ),
@@ -554,6 +561,42 @@ fn handle_request(request: Request, registry: &SharedRegistry) -> serde_json::Va
                 ),
                 None => error_response(request.request_id, "not_found", "device not found"),
             }
+        }
+        "GetInputCapabilities" | "get_input_capabilities" => {
+            let device_id = request
+                .params
+                .as_ref()
+                .and_then(|params| params.get("id").or_else(|| params.get("device_id")))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            match guard.device(device_id) {
+                Some(device) => response(request.request_id, input::capabilities(device)),
+                None => error_response(request.request_id, "not_found", "device not found"),
+            }
+        }
+        "StopInputTest" | "stop_input_test" => {
+            let session_id = request
+                .params
+                .as_ref()
+                .and_then(|params| params.get("session_id"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            let stopped = sessions
+                .lock()
+                .ok()
+                .and_then(|mut active| active.remove(session_id))
+                .map(|flag| {
+                    flag.store(true, Ordering::Relaxed);
+                    true
+                })
+                .unwrap_or(false);
+            response(
+                request.request_id,
+                serde_json::json!({
+                    "session_id": session_id,
+                    "stopped": stopped,
+                }),
+            )
         }
         "ReloadDrivers" | "reload_drivers" => {
             guard.reload_drivers();
@@ -638,7 +681,11 @@ fn handle_monitor_request(request: Request, registry: &SharedRegistry) -> serde_
     }
 }
 
-fn serve_client(mut stream: UnixStream, registry: SharedRegistry) -> Result<()> {
+fn serve_client(
+    mut stream: UnixStream,
+    registry: SharedRegistry,
+    sessions: InputSessions,
+) -> Result<()> {
     configure_client_stream(&stream)?;
     let mut reader = BufReader::new(stream.try_clone()?);
     while let Some(line) = read_ipc_line(&mut reader)? {
@@ -648,14 +695,77 @@ fn serve_client(mut stream: UnixStream, registry: SharedRegistry) -> Result<()> 
             stream.flush()?;
             break;
         }
-        let result = match serde_json::from_slice::<Request>(&line) {
-            Ok(request) => handle_request(request, &registry),
-            Err(error) => error_response(
-                None,
-                "invalid_request",
-                &format!("invalid request: {error}"),
-            ),
+        let request = match serde_json::from_slice::<Request>(&line) {
+            Ok(request) => request,
+            Err(error) => {
+                let result = error_response(
+                    None,
+                    "invalid_request",
+                    &format!("invalid request: {error}"),
+                );
+                writeln!(stream, "{}", serde_json::to_string(&result)?)?;
+                stream.flush()?;
+                continue;
+            }
         };
+        let Request {
+            method,
+            request_id,
+            params,
+        } = &request;
+        if matches!(method.as_str(), "StartInputTest" | "start_input_test") {
+            let device_id = params
+                .as_ref()
+                .and_then(|value| value.get("id").or_else(|| value.get("device_id")))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            let device = registry
+                .lock()
+                .ok()
+                .and_then(|guard| guard.device(device_id).cloned());
+            let Some(device) = device else {
+                let result = error_response(request_id.clone(), "not_found", "device not found");
+                writeln!(stream, "{}", serde_json::to_string(&result)?)?;
+                stream.flush()?;
+                continue;
+            };
+            if !device.external {
+                let result = error_response(
+                    request_id.clone(),
+                    "not_external",
+                    "input tests are restricted to external peripherals",
+                );
+                writeln!(stream, "{}", serde_json::to_string(&result)?)?;
+                stream.flush()?;
+                continue;
+            }
+            let session_id = request_id
+                .clone()
+                .unwrap_or_else(|| format!("input-{}", std::process::id()));
+            let stop = Arc::new(AtomicBool::new(false));
+            if let Ok(mut active) = sessions.lock() {
+                if let Some(previous) = active.insert(session_id.clone(), Arc::clone(&stop)) {
+                    previous.store(true, Ordering::Relaxed);
+                }
+            }
+            let result = response(
+                request_id.clone(),
+                serde_json::json!({
+                    "session_id": session_id,
+                    "capabilities": input::capabilities(&device),
+                    "safety": "read-only",
+                }),
+            );
+            writeln!(stream, "{}", serde_json::to_string(&result)?)?;
+            stream.flush()?;
+            let stream_result = input::stream_events(&device, &mut stream, &stop);
+            if let Ok(mut active) = sessions.lock() {
+                active.remove(&session_id);
+            }
+            stream_result?;
+            break;
+        }
+        let result = handle_request(request, &registry, &sessions);
         writeln!(stream, "{}", serde_json::to_string(&result)?)?;
         stream.flush()?;
     }
@@ -676,13 +786,15 @@ fn start_ipc_server(registry: SharedRegistry) -> Result<()> {
     let listener = UnixListener::bind(&path)?;
     fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
     eprintln!("pericored IPC: {}", path.display());
+    let sessions: InputSessions = Arc::new(Mutex::new(BTreeMap::new()));
     thread::spawn(move || {
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
                     let registry = Arc::clone(&registry);
+                    let sessions = Arc::clone(&sessions);
                     thread::spawn(move || {
-                        let _ = serve_client(stream, registry);
+                        let _ = serve_client(stream, registry, sessions);
                     });
                 }
                 Err(error) => eprintln!("pericored IPC error: {error}"),

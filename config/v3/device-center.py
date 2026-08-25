@@ -2,7 +2,6 @@
 
 import json
 import os
-import select
 import shutil
 import socket
 import struct
@@ -84,6 +83,20 @@ def event_nodes(device):
     return [node for node in device.get("nodes", []) if node.startswith("/dev/input/event")]
 
 
+def normalized_event_text(event):
+    control = str(event.get("control") or "contrôle inconnu")
+    label = control.rsplit(".", 1)[-1].replace("_", " ").title()
+    kind = event.get("kind")
+    raw = int(event.get("raw_value") or 0)
+    if kind in ("key", "button"):
+        action = {0: "relâché", 1: "pressé", 2: "répété"}.get(raw, f"valeur {raw}")
+        return f"{label} · {action}"
+    normalized = event.get("normalized_value")
+    if normalized is not None:
+        return f"{label} · {float(normalized):+.3f} (brut {raw})"
+    return f"{label} · {raw:+d}"
+
+
 def report_bytes(report):
     try:
         data = bytes.fromhex(str(report.get("raw_hex") or ""))
@@ -157,22 +170,34 @@ def is_external_peripheral(device):
     return "gamepad" in device_classes
 
 
-def pericored_inventory():
+def pericored_socket_path():
     socket_path = os.environ.get("PERIPHX_SOCKET")
     if not socket_path:
         runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
         socket_path = os.path.join(runtime_dir, "periphx", "pericored.sock") \
             if runtime_dir else "/tmp/periphx-pericored.sock"
+    return socket_path
+
+
+def pericored_request(method, params=None, request_id="gui"):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(2)
+        client.connect(pericored_socket_path())
+        client.sendall((json.dumps({
+            "method": method, "request_id": request_id, "params": params or {},
+        }) + "\n").encode())
+        response = client.makefile("rb").readline()
+    payload = json.loads(response)
+    if not payload.get("ok"):
+        error = payload.get("error") or {}
+        raise RuntimeError(error.get("message", "erreur IPC pericored"))
+    return payload.get("result") or {}
+
+
+def pericored_inventory():
     try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(1)
-            client.connect(socket_path)
-            client.sendall(b'{"method":"list_devices","request_id":"gui"}\n')
-            response = client.makefile("rb").readline()
-        payload = json.loads(response)
-        if payload.get("ok"):
-            return payload["result"].get("devices", [])
-    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        return pericored_request("list_devices").get("devices", [])
+    except (OSError, RuntimeError, json.JSONDecodeError, KeyError, TypeError):
         pass
     return None
 
@@ -541,6 +566,11 @@ class DeviceCenter(Adw.ApplicationWindow):
         self.test_generation = 0
         self.test_log_lines = []
         self.test_previous_keys = set()
+        self.test_expected_controls = set()
+        self.test_tested_controls = set()
+        self.test_session_id = None
+        self.test_control_widgets = {}
+        self.test_controls = []
         self.connect("close-request", self.close_requested)
 
         toolbar = Adw.ToolbarView()
@@ -664,6 +694,23 @@ class DeviceCenter(Adw.ApplicationWindow):
             css_classes=["dim-label"],
         )
         content.append(self.test_status)
+        visual_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        visual_header.append(Gtk.Label(
+            label="Visualiseur matériel", xalign=0, hexpand=True,
+            css_classes=["title-2"],
+        ))
+        self.test_visual_count = Gtk.Label(label="", css_classes=["dim-label"])
+        visual_header.append(self.test_visual_count)
+        content.append(visual_header)
+        self.test_visual = Gtk.FlowBox(
+            selection_mode=Gtk.SelectionMode.NONE, homogeneous=True,
+            column_spacing=8, row_spacing=8,
+            min_children_per_line=4, max_children_per_line=12,
+        )
+        visual_scroll = Gtk.ScrolledWindow(min_content_height=170)
+        visual_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        visual_scroll.set_child(self.test_visual)
+        content.append(visual_scroll)
         activity = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL, spacing=8,
             margin_top=16, margin_bottom=16, margin_start=16, margin_end=16,
@@ -679,6 +726,10 @@ class DeviceCenter(Adw.ApplicationWindow):
         activity.append(self.test_activity_title)
         activity.append(self.test_activity_value)
         activity.append(self.test_activity_bar)
+        self.test_coverage_label = Gtk.Label(
+            label="Aucun contrôle testé", xalign=0, css_classes=["dim-label"],
+        )
+        activity.append(self.test_coverage_label)
         content.append(activity)
 
         content.append(self.section(
@@ -1063,6 +1114,12 @@ class DeviceCenter(Adw.ApplicationWindow):
         if self.test_running:
             self.stop_input_test("Périphérique de test modifié.")
         device = self.selected_test_device()
+        self.test_controls = []
+        self.test_expected_controls.clear()
+        self.test_tested_controls.clear()
+        self.clear(self.test_visual)
+        self.test_control_widgets.clear()
+        self.test_visual_count.set_text("")
         if device:
             self.test_activity_title.set_text(device.get("name", "Périphérique"))
             self.test_activity_value.set_text("Appuyez sur Démarrer, puis utilisez le périphérique.")
@@ -1079,6 +1136,14 @@ class DeviceCenter(Adw.ApplicationWindow):
         generation = self.test_generation
         self.test_stop_event = threading.Event()
         self.test_previous_keys = set()
+        self.test_expected_controls.clear()
+        self.test_tested_controls.clear()
+        if self.test_controls:
+            self.render_test_controls(self.test_controls)
+        self.test_coverage_label.set_text("Découverte des contrôles…")
+        self.test_activity_bar.set_fraction(0)
+        self.test_session_id = f"gui-input-{os.getpid()}-{generation}"
+        session_id = self.test_session_id
         self.test_toggle.set_label("Arrêter")
         self.test_toggle.remove_css_class("suggested-action")
         self.test_toggle.add_css_class("destructive-action")
@@ -1086,51 +1151,54 @@ class DeviceCenter(Adw.ApplicationWindow):
         self.test_activity_title.set_text(device.get("name", "Périphérique"))
 
         def worker():
-            streams = []
-            errors = []
             try:
-                for node in event_nodes(device):
-                    try:
-                        streams.append((node, os.open(node, os.O_RDONLY | os.O_NONBLOCK)))
-                    except OSError as error:
-                        errors.append(f"{node}: {error.strerror}")
-                if not streams:
-                    detail = "; ".join(errors) or "aucune interface /dev/input/event"
-                    raise OSError(f"aucune interface d’entrée accessible ({detail})")
-                descriptors = [descriptor for _node, descriptor in streams]
-                while not self.test_stop_event.is_set():
-                    readable, _writable, _exceptional = select.select(
-                        descriptors, [], [], 0.25,
-                    )
-                    events = []
-                    for descriptor in readable:
-                        node = next(node for node, current in streams if current == descriptor)
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                    client.settimeout(0.3)
+                    client.connect(pericored_socket_path())
+                    client.sendall((json.dumps({
+                        "method": "start_input_test",
+                        "request_id": session_id,
+                        "params": {"device_id": device["id"]},
+                    }) + "\n").encode())
+                    buffer = b""
+                    started = False
+                    while not self.test_stop_event.is_set():
                         try:
-                            data = os.read(descriptor, INPUT_EVENT.size * 64)
-                        except BlockingIOError:
+                            chunk = client.recv(65536)
+                        except socket.timeout:
                             continue
-                        for offset in range(0, len(data) - INPUT_EVENT.size + 1,
-                                            INPUT_EVENT.size):
-                            seconds, micros, event_type, code, value = INPUT_EVENT.unpack_from(
-                                data, offset,
+                        if not chunk:
+                            break
+                        buffer += chunk
+                        lines = buffer.split(b"\n")
+                        buffer = lines.pop()
+                        events = []
+                        for line in lines:
+                            if not line:
+                                continue
+                            payload = json.loads(line)
+                            if not started:
+                                if not payload.get("ok"):
+                                    detail = (payload.get("error") or {}).get(
+                                        "message", "session refusée",
+                                    )
+                                    raise RuntimeError(detail)
+                                started = True
+                                GLib.idle_add(
+                                    self.input_test_batch, generation, device,
+                                    {"started": payload.get("result") or {}}, None,
+                                )
+                            elif payload.get("event") == "input":
+                                events.append(payload)
+                        if events:
+                            GLib.idle_add(
+                                self.input_test_batch, generation, device,
+                                {"events": events}, None,
                             )
-                            if event_type:
-                                events.append({
-                                    "node": node, "seconds": seconds, "micros": micros,
-                                    "type": event_type, "code": code, "value": value,
-                                })
-                    if events:
-                        GLib.idle_add(
-                            self.input_test_batch, generation, device,
-                            {"events": events}, None,
-                        )
-            except (OSError, ValueError) as error:
+            except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
                 GLib.idle_add(
                     self.input_test_batch, generation, device, None, str(error),
                 )
-            finally:
-                for _node, descriptor in streams:
-                    os.close(descriptor)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1138,6 +1206,13 @@ class DeviceCenter(Adw.ApplicationWindow):
         if not hasattr(self, "test_toggle"):
             return
         self.test_stop_event.set()
+        session_id = self.test_session_id
+        self.test_session_id = None
+        if session_id:
+            threading.Thread(
+                target=self.stop_daemon_input_session,
+                args=(session_id,), daemon=True,
+            ).start()
         self.test_generation += 1
         self.test_running = False
         self.test_toggle.set_label("Démarrer")
@@ -1147,17 +1222,84 @@ class DeviceCenter(Adw.ApplicationWindow):
         if message:
             self.test_status.set_text(message)
 
+    @staticmethod
+    def stop_daemon_input_session(session_id):
+        try:
+            pericored_request(
+                "stop_input_test", {"session_id": session_id},
+                request_id=f"stop-{session_id}",
+            )
+        except (OSError, RuntimeError, json.JSONDecodeError):
+            pass
+
     def clear_input_test(self, _button=None):
         self.test_log_lines.clear()
         self.test_previous_keys.clear()
+        self.test_tested_controls.clear()
+        if self.test_controls:
+            self.render_test_controls(self.test_controls)
         self.test_log_label.set_text("Aucun événement")
         self.test_activity_value.set_text("—")
         self.test_activity_bar.set_fraction(0)
+        total = len(self.test_expected_controls)
+        self.test_coverage_label.set_text(
+            f"0 / {total} contrôles testés" if total else "Aucun contrôle testé"
+        )
 
     def append_test_event(self, text):
         self.test_log_lines.append(f"{time.strftime('%H:%M:%S')}  {text}")
         self.test_log_lines = self.test_log_lines[-60:]
         self.test_log_label.set_text("\n".join(reversed(self.test_log_lines)))
+
+    def render_test_controls(self, controls):
+        self.clear(self.test_visual)
+        self.test_control_widgets.clear()
+        for item in controls:
+            control = item.get("control")
+            if not control:
+                continue
+            label = control.rsplit(".", 1)[-1].replace("_", " ").title()
+            card = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL, spacing=5,
+                margin_top=7, margin_bottom=7, margin_start=9, margin_end=9,
+                css_classes=["card"],
+            )
+            title = Gtk.Label(label=label, ellipsize=3, max_width_chars=16)
+            card.append(title)
+            if item.get("kind") in ("axis", "hat", "touch"):
+                value = Gtk.Label(label="0.000", css_classes=["dim-label"])
+                level = Gtk.LevelBar()
+                level.set_min_value(0)
+                level.set_max_value(1)
+                level.set_value(0 if ".trigger." in control else 0.5)
+                level.set_size_request(100, -1)
+                card.append(value)
+                card.append(level)
+                self.test_control_widgets[control] = ("axis", title, value, level)
+            else:
+                state = Gtk.Label(label="○ Non testé", css_classes=["dim-label"])
+                card.append(state)
+                self.test_control_widgets[control] = ("button", title, state)
+            self.test_visual.append(card)
+        self.test_visual_count.set_text(f"{len(controls)} contrôle(s)")
+
+    def update_test_control(self, event):
+        control = event.get("control")
+        widget = self.test_control_widgets.get(control)
+        if not widget:
+            return
+        raw = int(event.get("raw_value") or 0)
+        if widget[0] == "button":
+            state = widget[2]
+            state.set_text("● Pressé" if raw else "✓ Détecté")
+            state.remove_css_class("dim-label")
+            state.add_css_class("success")
+        else:
+            normalized = event.get("normalized_value")
+            value = float(normalized) if normalized is not None else 0.0
+            widget[2].set_text(f"{value:+.3f}")
+            fraction = value if ".trigger." in control else (value + 1) / 2
+            widget[3].set_value(max(0, min(1, fraction)))
 
     def input_test_batch(self, generation, device, result, error):
         if generation != self.test_generation or not self.test_running:
@@ -1165,14 +1307,43 @@ class DeviceCenter(Adw.ApplicationWindow):
         if error:
             self.stop_input_test(f"Test indisponible : {error}")
             return False
+        started = (result or {}).get("started")
+        if started is not None:
+            controls = (started.get("capabilities") or {}).get("controls") or []
+            self.test_controls = controls
+            self.render_test_controls(controls)
+            self.test_expected_controls = {
+                item.get("control") for item in controls
+                if item.get("kind") in ("key", "button") and item.get("control")
+            }
+            total = len(self.test_expected_controls)
+            self.test_coverage_label.set_text(
+                f"0 / {total} boutons ou touches testés" if total
+                else f"{len(controls)} contrôle(s) analogique(s) détecté(s)"
+            )
+            self.test_status.set_text(
+                f"Session pericored active · {len(controls)} contrôle(s) · lecture seule"
+            )
         events = (result or {}).get("events") or []
         for event in events:
-            summary = decode_input_event(event)
+            summary = normalized_event_text(event)
             if not summary:
                 continue
             self.test_activity_value.set_text(summary)
             self.append_test_event(summary)
-            self.test_activity_bar.pulse()
+            self.update_test_control(event)
+            if event.get("kind") in ("key", "button") and event.get("raw_value") == 1:
+                self.test_tested_controls.add(event.get("control"))
+            if self.test_expected_controls:
+                tested = len(self.test_tested_controls & self.test_expected_controls)
+                total = len(self.test_expected_controls)
+                self.test_activity_bar.set_fraction(tested / total)
+                self.test_coverage_label.set_text(
+                    f"{tested} / {total} boutons ou touches testés"
+                    + (" · Tous détectés ✓" if tested == total else "")
+                )
+            else:
+                self.test_activity_bar.pulse()
         reports = (result or {}).get("reports") or []
         for report in reports:
             summary = summarize_hid_report(device.get("class"), report)

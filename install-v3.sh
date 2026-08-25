@@ -156,8 +156,11 @@ enable_pericored() {
         printf 'INFO     bus systemd utilisateur indisponible : service non activé\n'
         return
     fi
-    if [ -x "$pericore_target" ] && ! systemctl --user enable --now pericored.service >/dev/null 2>&1; then
-        printf 'ATTENTION impossible d activer pericored.service ; consultez systemctl --user status pericored\n' >&2
+    if [ -x "$pericore_target" ]; then
+        if ! systemctl --user enable pericored.service >/dev/null 2>&1 \
+                || ! systemctl --user restart pericored.service >/dev/null 2>&1; then
+            printf 'ATTENTION impossible d activer pericored.service ; consultez systemctl --user status pericored\n' >&2
+        fi
     fi
 }
 

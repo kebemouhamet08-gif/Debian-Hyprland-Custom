@@ -76,6 +76,24 @@ class PeriphxCliTests(unittest.TestCase):
         self.assertIn("/dev/hidraw2", rendered)
         self.assertIn("64 bytes", rendered)
 
+    def test_capture_rendering_preserves_report_id_none(self):
+        result = {
+            "reports": [
+                {
+                    "node": "/dev/hidraw2",
+                    "size": 2,
+                    "report_id": None,
+                    "raw_hex": "00ff",
+                }
+            ]
+        }
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            PERIPHX.print_capture(result)
+        rendered = output.getvalue()
+        self.assertIn("report none", rendered)
+        self.assertIn("00ff", rendered)
+
     def test_custom_driver_install_and_update_are_atomic(self):
         manifest = {
             "schema_version": 1,

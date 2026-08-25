@@ -14,6 +14,7 @@ use udev::{Device, Enumerator, EventType, MonitorBuilder};
 
 mod drivers;
 mod hid;
+mod monitor;
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -438,6 +439,12 @@ fn error_response(request_id: Option<String>, code: &str, message: &str) -> serd
 }
 
 fn handle_request(request: Request, registry: &SharedRegistry) -> serde_json::Value {
+    if matches!(
+        request.method.as_str(),
+        "MonitorHid" | "monitor_hid" | "MonitorHidAll" | "monitor_hid_all"
+    ) {
+        return handle_monitor_request(request, registry);
+    }
     let mut guard = match registry.lock() {
         Ok(guard) => guard,
         Err(_) => {
@@ -473,7 +480,7 @@ fn handle_request(request: Request, registry: &SharedRegistry) -> serde_json::Va
             request.request_id,
             serde_json::json!({
                 "device_count": guard.devices.values().filter(|device| device.connected).count(),
-                "supported": ["ping", "version", "list_devices", "get_device", "get_capabilities", "get_state", "inspect", "get_hid_interfaces", "reload_drivers", "set_property", "apply_profile"],
+                "supported": ["ping", "version", "list_devices", "get_device", "get_capabilities", "get_state", "inspect", "get_hid_interfaces", "monitor_hid", "monitor_hid_all", "reload_drivers", "set_property", "apply_profile"],
                 "drivers": guard.driver_registry.names(),
             }),
         ),
@@ -560,6 +567,33 @@ fn handle_request(request: Request, registry: &SharedRegistry) -> serde_json::Va
             "no writable driver is registered for this device",
         ),
         _ => error_response(request.request_id, "unknown_method", "unknown method"),
+    }
+}
+
+fn handle_monitor_request(request: Request, registry: &SharedRegistry) -> serde_json::Value {
+    let device_id = request
+        .params
+        .as_ref()
+        .and_then(|params| params.get("id"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    let device = match registry.lock() {
+        Ok(guard) => guard.device(device_id).cloned(),
+        Err(_) => {
+            return error_response(
+                request.request_id,
+                "registry_unavailable",
+                "registry unavailable",
+            )
+        }
+    };
+    let Some(device) = device else {
+        return error_response(request.request_id, "not_found", "device not found");
+    };
+    let all = matches!(request.method.as_str(), "MonitorHidAll" | "monitor_hid_all");
+    match monitor::capture(&device, request.params.as_ref(), all) {
+        Ok(result) => response(request.request_id, result),
+        Err(error) => error_response(request.request_id, "hid_unavailable", &error),
     }
 }
 

@@ -56,7 +56,13 @@ La CLI expose l'inventaire et l'inspection détaillée sans écrire vers le mat�
 periphx-cli list
 periphx-cli inspect DEVICE_ID
 periphx-cli interfaces DEVICE_ID
+periphx-cli capture DEVICE_ID --duration-ms 1000
 ```
+
+La capture n'ouvre que les nœuds `hidraw` rattachés au périphérique sélectionné,
+avec `O_RDONLY`, une durée maximale de 30 secondes et au plus 1 000 reports. Si
+les permissions Linux refusent la lecture, PeriphX renvoie une erreur explicite
+et ne modifie jamais les permissions du périphérique automatiquement.
 
 Des manifests de pilotes custom peuvent être validés, installés et mis à jour en
 lecture seule. Le format et ses garanties de sécurité sont décrits dans

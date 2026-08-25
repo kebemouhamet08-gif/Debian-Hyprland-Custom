@@ -17,10 +17,10 @@ def socket_path():
     )
 
 
-def request(method, params=None, request_id="cli"):
+def request(method, params=None, request_id="cli", timeout=3):
     payload = {"method": method, "request_id": request_id, "params": params or {}}
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-        client.settimeout(3)
+        client.settimeout(timeout)
         client.connect(socket_path())
         client.sendall((json.dumps(payload) + "\n").encode())
         response = client.makefile("rb").readline()
@@ -73,6 +73,18 @@ def print_interfaces(result):
         print(f"  Risk: {interface.get('risk') or 'unknown'}")
         print(f"  Nodes: {', '.join(interface.get('nodes') or []) or 'none'}")
         print(f"  Descriptor: {interface.get('descriptor_size', 0)} bytes")
+
+
+def print_capture(result):
+    reports = result.get("reports") or []
+    print(f"PeriphX HID Capture ({len(reports)} reports, lecture seule)")
+    for report in reports:
+        report_id = report.get("report_id")
+        identifier = "none" if report_id is None else f"0x{report_id:02x}"
+        print(
+            f"{report.get('node', 'unknown')} · {report.get('size', 0)} bytes · "
+            f"report {identifier} · {report.get('raw_hex', '')}"
+        )
 
 
 READ_ONLY_DRIVER_CAPABILITIES = {
@@ -209,6 +221,16 @@ def main():
     )
     interfaces.add_argument("device_id")
     interfaces.add_argument("--json", action="store_true", help="sortie JSON complète")
+    capture = subparsers.add_parser(
+        "capture", help="capture des reports HID entrants, sans écriture"
+    )
+    capture.add_argument("device_id")
+    capture.add_argument("--interface", dest="interface_id")
+    capture.add_argument("--node")
+    capture.add_argument("--duration-ms", type=int, default=1000)
+    capture.add_argument("--max-reports", type=int, default=128)
+    capture.add_argument("--all", action="store_true", help="écoute toutes les interfaces HID")
+    capture.add_argument("--json", action="store_true", help="sortie JSON complète")
     drivers = subparsers.add_parser(
         "drivers", help="gère les manifests de pilotes custom en lecture seule"
     )
@@ -245,6 +267,27 @@ def main():
                 print_json(result)
             else:
                 print_interfaces(result)
+        elif args.command == "capture":
+            duration_ms = max(1, min(args.duration_ms, 30_000))
+            max_reports = max(1, min(args.max_reports, 1_000))
+            params = {
+                "id": args.device_id,
+                "duration_ms": duration_ms,
+                "max_reports": max_reports,
+            }
+            if args.interface_id:
+                params["interface_id"] = args.interface_id
+            if args.node:
+                params["node"] = args.node
+            result = request(
+                "monitor_hid_all" if args.all else "monitor_hid",
+                params,
+                timeout=duration_ms / 1000 + 3,
+            )
+            if args.json:
+                print_json(result)
+            else:
+                print_capture(result)
         elif args.command == "drivers":
             if args.driver_action == "list":
                 print_json(list_driver_manifests())

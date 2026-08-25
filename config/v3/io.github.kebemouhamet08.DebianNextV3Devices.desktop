@@ -6,5 +6,5 @@ Exec=periphx
 Icon=preferences-desktop-peripherals
 Terminal=false
 Categories=Settings;HardwareSettings;
-Keywords=keyboard;mouse;monitor;gamepad;usb;rgb;
+Keywords=keyboard;mouse;monitor;gamepad;usb;rgb;driver;clavier;souris;écran;manette;pilote;
 StartupNotify=true

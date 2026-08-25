@@ -30,7 +30,7 @@ réglages, sauvegardes, manifeste et installateur.
 
 État : le centre de contrôle matériel existe dans `config/v3/device-center.py`.
 Il consomme en priorité l’inventaire physique agrégé par `pericored`, sépare les
-interfaces clavier, souris et manette externes, puis conserve les outils Debian
+interfaces externes de clavier, souris et manette, puis conserve les outils Debian
 comme repli. L’onglet Affichage ouvre MPVpaper Engine. Les commandes propriétaires
 ne sont jamais envoyées sans backend et protocole identifiés.
 
@@ -61,7 +61,7 @@ ne sont jamais envoyées sans backend et protocole identifiés.
 - [x] capture bornée des reports entrants avec ouverture `O_RDONLY` uniquement ;
 - [x] manifests de pilotes custom stricts, atomiques et limités à la lecture ;
 - [x] socket utilisateur privé, requêtes IPC bornées et service systemd durci ;
-- [ ] premier driver matériel avec opérations d écriture validées.
+- [ ] premier driver matériel avec opérations d’écriture validées.
 
 ### 4. Thèmes et couleurs
 

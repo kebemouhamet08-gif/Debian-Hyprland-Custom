@@ -67,6 +67,39 @@ class DeviceCenterTests(unittest.TestCase):
         self.assertEqual(by_title["Souris"][0]["class"], "mouse")
         self.assertEqual(by_title["Manettes"], [])
 
+    def test_keyboard_reports_are_rendered_as_named_keys(self):
+        report = {"raw_hex": "00001a0000000000", "report_id": None}
+        self.assertEqual(DEVICE_CENTER.keyboard_report_keys(report), {"W"})
+        self.assertEqual(
+            DEVICE_CENTER.summarize_hid_report("keyboard", report), "Touches : W"
+        )
+
+    def test_mouse_reports_render_buttons_movement_and_wheel(self):
+        report = {"raw_hex": "010105ff01", "report_id": 1}
+        summary = DEVICE_CENTER.summarize_hid_report("mouse", report)
+        self.assertIn("Boutons : 1", summary)
+        self.assertIn("X +5", summary)
+        self.assertIn("Y -1", summary)
+        self.assertIn("molette +1", summary)
+
+    def test_linux_input_events_cover_keyboard_mouse_and_gamepad(self):
+        self.assertEqual(
+            DEVICE_CENTER.decode_input_event({"type": 1, "code": 17, "value": 1}),
+            "Z · pressé",
+        )
+        self.assertEqual(
+            DEVICE_CENTER.decode_input_event({"type": 2, "code": 0, "value": -4}),
+            "X · -4",
+        )
+        self.assertEqual(
+            DEVICE_CENTER.decode_input_event({"type": 3, "code": 16, "value": 1}),
+            "Croix X · 1",
+        )
+
+    def test_only_event_nodes_are_used_for_live_input(self):
+        device = {"nodes": ["/dev/hidraw1", "/dev/input/event20", "/dev/input/mouse4"]}
+        self.assertEqual(DEVICE_CENTER.event_nodes(device), ["/dev/input/event20"])
+
 
 if __name__ == "__main__":
     unittest.main()

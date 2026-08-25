@@ -2,10 +2,14 @@
 
 import json
 import os
+import select
 import shutil
 import socket
+import struct
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import gi
@@ -18,6 +22,114 @@ from gi.repository import Adw, GLib, Gtk
 APP_ID = "io.github.kebemouhamet08.PeriphX"
 MANAGED_DEVICE_CLASSES = ("keyboard", "mouse", "gamepad")
 NO_DAEMON_CHECK = object()
+
+HID_KEY_NAMES = {
+    4: "A", 5: "B", 6: "C", 7: "D", 8: "E", 9: "F", 10: "G",
+    11: "H", 12: "I", 13: "J", 14: "K", 15: "L", 16: "M",
+    17: "N", 18: "O", 19: "P", 20: "Q", 21: "R", 22: "S",
+    23: "T", 24: "U", 25: "V", 26: "W", 27: "X", 28: "Y",
+    29: "Z", 30: "1", 31: "2", 32: "3", 33: "4", 34: "5",
+    35: "6", 36: "7", 37: "8", 38: "9", 39: "0", 40: "Entrée",
+    41: "Échap", 42: "Retour", 43: "Tab", 44: "Espace", 57: "Verr. Maj",
+    58: "F1", 59: "F2", 60: "F3", 61: "F4", 62: "F5", 63: "F6",
+    64: "F7", 65: "F8", 66: "F9", 67: "F10", 68: "F11", 69: "F12",
+}
+HID_MODIFIER_NAMES = (
+    "Ctrl G", "Maj G", "Alt G", "Super G",
+    "Ctrl D", "Maj D", "Alt D", "Super D",
+)
+INPUT_EVENT = struct.Struct("@llHHi")
+LINUX_KEY_NAMES = {
+    1: "Échap", 2: "1", 3: "2", 4: "3", 5: "4", 6: "5", 7: "6",
+    8: "7", 9: "8", 10: "9", 11: "0", 14: "Retour", 15: "Tab",
+    16: "A", 17: "Z", 18: "E", 19: "R", 20: "T", 21: "Y", 22: "U",
+    23: "I", 24: "O", 25: "P", 28: "Entrée", 29: "Ctrl G", 30: "Q",
+    31: "S", 32: "D", 33: "F", 34: "G", 35: "H", 36: "J", 37: "K",
+    38: "L", 42: "Maj G", 44: "W", 45: "X", 46: "C", 47: "V",
+    48: "B", 49: "N", 50: "M", 54: "Maj D", 56: "Alt G", 57: "Espace",
+    58: "Verr. Maj", 59: "F1", 60: "F2", 61: "F3", 62: "F4", 63: "F5",
+    64: "F6", 65: "F7", 66: "F8", 67: "F9", 68: "F10", 87: "F11",
+    88: "F12", 97: "Ctrl D", 100: "Alt Gr", 103: "Haut", 105: "Gauche",
+    106: "Droite", 108: "Bas", 125: "Super G", 126: "Super D",
+    272: "Clic gauche", 273: "Clic droit", 274: "Clic milieu",
+    275: "Bouton latéral", 276: "Bouton arrière",
+    304: "Manette A", 305: "Manette B", 307: "Manette X", 308: "Manette Y",
+    310: "LB", 311: "RB", 314: "Select", 315: "Start", 316: "Mode",
+    317: "Stick gauche", 318: "Stick droit",
+}
+REL_NAMES = {0: "X", 1: "Y", 6: "molette horizontale", 8: "molette"}
+ABS_NAMES = {
+    0: "Stick gauche X", 1: "Stick gauche Y", 2: "Gâchette gauche",
+    3: "Stick droit X", 4: "Stick droit Y", 5: "Gâchette droite",
+    16: "Croix X", 17: "Croix Y",
+}
+
+
+def decode_input_event(event):
+    event_type = event.get("type")
+    code = event.get("code", 0)
+    value = event.get("value", 0)
+    if event_type == 1:
+        name = LINUX_KEY_NAMES.get(code, f"Bouton {code}")
+        action = {0: "relâché", 1: "pressé", 2: "répété"}.get(value, f"valeur {value}")
+        return f"{name} · {action}"
+    if event_type == 2:
+        return f"{REL_NAMES.get(code, f'Mouvement {code}')} · {value:+d}"
+    if event_type == 3:
+        return f"{ABS_NAMES.get(code, f'Axe {code}')} · {value}"
+    return None
+
+
+def event_nodes(device):
+    return [node for node in device.get("nodes", []) if node.startswith("/dev/input/event")]
+
+
+def report_bytes(report):
+    try:
+        data = bytes.fromhex(str(report.get("raw_hex") or ""))
+    except ValueError:
+        return b""
+    report_id = report.get("report_id")
+    if report_id is not None and data and data[0] == report_id:
+        return data[1:]
+    return data
+
+
+def keyboard_report_keys(report):
+    data = report_bytes(report)
+    if len(data) < 2:
+        return set()
+    keys = {
+        HID_MODIFIER_NAMES[index]
+        for index in range(8) if data[0] & (1 << index)
+    }
+    keys.update(HID_KEY_NAMES.get(code, f"HID 0x{code:02X}")
+                for code in data[2:] if code)
+    return keys
+
+
+def signed_byte(value):
+    return value - 256 if value > 127 else value
+
+
+def summarize_hid_report(device_class, report):
+    data = report_bytes(report)
+    if device_class == "keyboard":
+        keys = sorted(keyboard_report_keys(report))
+        return "Touches : " + (" + ".join(keys) if keys else "aucune")
+    if device_class == "mouse" and data:
+        buttons = [str(index + 1) for index in range(8) if data[0] & (1 << index)]
+        movement = []
+        if len(data) >= 3:
+            movement = [f"X {signed_byte(data[1]):+d}", f"Y {signed_byte(data[2]):+d}"]
+        if len(data) >= 4 and signed_byte(data[3]):
+            movement.append(f"molette {signed_byte(data[3]):+d}")
+        return " · ".join([
+            f"Boutons : {', '.join(buttons) if buttons else 'aucun'}", *movement,
+        ])
+    report_id = report.get("report_id")
+    identifier = "sans ID" if report_id is None else f"report 0x{report_id:02X}"
+    return f"{identifier} · {len(data)} octet(s) · {data.hex(' ')[:120]}"
 
 
 def is_external_peripheral(device):
@@ -422,6 +534,14 @@ class DeviceCenter(Adw.ApplicationWindow):
         super().__init__(application=app, title="PeriphX")
         self.set_default_size(980, 700)
         self.set_size_request(720, 480)
+        self.test_devices = []
+        self.test_devices_signature = None
+        self.test_stop_event = threading.Event()
+        self.test_running = False
+        self.test_generation = 0
+        self.test_log_lines = []
+        self.test_previous_keys = set()
+        self.connect("close-request", self.close_requested)
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
@@ -434,6 +554,7 @@ class DeviceCenter(Adw.ApplicationWindow):
         self.stack.set_vexpand(True)
         self.stack.add_titled(self.build_overview(), "overview", "Vue d’ensemble")
         self.stack.add_titled(self.build_devices(), "devices", "Périphériques")
+        self.stack.add_titled(self.build_input_test(), "input-test", "Test des touches")
         self.stack.add_titled(self.build_drivers(), "drivers", "Pilotes")
         self.stack.add_titled(self.build_display_link(), "display", "Affichage")
         self.stack.add_titled(self.build_capabilities(), "capabilities", "Capacités")
@@ -509,6 +630,69 @@ class DeviceCenter(Adw.ApplicationWindow):
         self.capability_content.append(self.capability_rows_box)
         scroll = Gtk.ScrolledWindow(vexpand=True)
         scroll.set_child(self.capability_content)
+        return scroll
+
+    def build_input_test(self):
+        content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=16,
+            margin_top=24, margin_bottom=24, margin_start=28, margin_end=28,
+        )
+        content.append(self.section(
+            "Test des touches en temps réel",
+            "Observez les entrées du clavier, de la souris ou de la manette sélectionnée. "
+            "Aucune commande n’est envoyée au périphérique.",
+        ))
+
+        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.test_selector = Gtk.DropDown.new_from_strings(["Aucun périphérique externe"])
+        self.test_selector.set_hexpand(True)
+        self.test_selector.set_sensitive(False)
+        self.test_selector.connect("notify::selected", self.test_selection_changed)
+        controls.append(self.test_selector)
+        self.test_toggle = Gtk.Button(
+            label="Démarrer", css_classes=["suggested-action"], sensitive=False,
+        )
+        self.test_toggle.connect("clicked", self.toggle_input_test)
+        controls.append(self.test_toggle)
+        clear_button = Gtk.Button(label="Effacer")
+        clear_button.connect("clicked", self.clear_input_test)
+        controls.append(clear_button)
+        content.append(controls)
+
+        self.test_status = Gtk.Label(
+            label="Sélectionnez un périphérique externe.", xalign=0, wrap=True,
+            css_classes=["dim-label"],
+        )
+        content.append(self.test_status)
+        activity = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=8,
+            margin_top=16, margin_bottom=16, margin_start=16, margin_end=16,
+            css_classes=["boxed-list"],
+        )
+        self.test_activity_title = Gtk.Label(
+            label="En attente d’une entrée", xalign=0, css_classes=["title-2"],
+        )
+        self.test_activity_value = Gtk.Label(
+            label="—", xalign=0, wrap=True, selectable=True,
+        )
+        self.test_activity_bar = Gtk.ProgressBar(show_text=False)
+        activity.append(self.test_activity_title)
+        activity.append(self.test_activity_value)
+        activity.append(self.test_activity_bar)
+        content.append(activity)
+
+        content.append(self.section(
+            "Journal", "Les 60 événements les plus récents sont conservés à l’écran.",
+        ))
+        self.test_log_label = Gtk.Label(
+            label="Aucun événement", xalign=0, yalign=0, wrap=True,
+            selectable=True, css_classes=["monospace", "dim-label"],
+        )
+        log_scroll = Gtk.ScrolledWindow(vexpand=True, min_content_height=180)
+        log_scroll.set_child(self.test_log_label)
+        content.append(log_scroll)
+        scroll = Gtk.ScrolledWindow(vexpand=True)
+        scroll.set_child(content)
         return scroll
 
     def build_drivers(self):
@@ -821,8 +1005,197 @@ class DeviceCenter(Adw.ApplicationWindow):
         button.set_sensitive(True)
         return False
 
+    def close_requested(self, _window):
+        self.stop_input_test()
+        return False
+
+    def selected_test_device(self):
+        index = self.test_selector.get_selected()
+        return self.test_devices[index] if index < len(self.test_devices) else None
+
+    def refresh_test_devices(self, devices):
+        candidates = []
+        seen = set()
+        for device in devices or []:
+            identifier = device.get("id")
+            device_class = device.get("class")
+            classes = device.get("classes") or [device_class]
+            if device_class not in MANAGED_DEVICE_CLASSES:
+                device_class = next(
+                    (item for item in MANAGED_DEVICE_CLASSES if item in classes), device_class
+                )
+            if (not identifier or identifier in seen or not is_external_peripheral(device)
+                    or device_class not in MANAGED_DEVICE_CLASSES):
+                continue
+            item = dict(device)
+            item["class"] = device_class
+            candidates.append(item)
+            seen.add(identifier)
+        signature = tuple(
+            (item["id"], item.get("name"), item.get("class")) for item in candidates
+        )
+        if signature == self.test_devices_signature:
+            return
+        previous = self.selected_test_device()
+        previous_id = previous.get("id") if previous else None
+        self.stop_input_test()
+        self.test_devices = candidates
+        self.test_devices_signature = signature
+        labels = [
+            f"{item.get('name', 'Périphérique')} · {item.get('class', 'HID')} · "
+            f"{item.get('connection', 'connexion inconnue')}"
+            for item in candidates
+        ] or ["Aucun clavier, souris ou manette externe"]
+        self.test_selector.set_model(Gtk.StringList.new(labels))
+        selected = next(
+            (index for index, item in enumerate(candidates) if item["id"] == previous_id), 0
+        )
+        self.test_selector.set_selected(selected)
+        available = bool(candidates)
+        self.test_selector.set_sensitive(available)
+        self.test_toggle.set_sensitive(available)
+        self.test_status.set_text(
+            "Prêt · événements Linux entrants uniquement" if available
+            else "Aucun périphérique externe testable n’est connecté."
+        )
+
+    def test_selection_changed(self, _selector, _property):
+        if self.test_running:
+            self.stop_input_test("Périphérique de test modifié.")
+        device = self.selected_test_device()
+        if device:
+            self.test_activity_title.set_text(device.get("name", "Périphérique"))
+            self.test_activity_value.set_text("Appuyez sur Démarrer, puis utilisez le périphérique.")
+
+    def toggle_input_test(self, _button):
+        if self.test_running:
+            self.stop_input_test("Test arrêté.")
+            return
+        device = self.selected_test_device()
+        if not device:
+            return
+        self.test_running = True
+        self.test_generation += 1
+        generation = self.test_generation
+        self.test_stop_event = threading.Event()
+        self.test_previous_keys = set()
+        self.test_toggle.set_label("Arrêter")
+        self.test_toggle.remove_css_class("suggested-action")
+        self.test_toggle.add_css_class("destructive-action")
+        self.test_status.set_text("Test actif · entrée uniquement · aucune commande envoyée")
+        self.test_activity_title.set_text(device.get("name", "Périphérique"))
+
+        def worker():
+            streams = []
+            errors = []
+            try:
+                for node in event_nodes(device):
+                    try:
+                        streams.append((node, os.open(node, os.O_RDONLY | os.O_NONBLOCK)))
+                    except OSError as error:
+                        errors.append(f"{node}: {error.strerror}")
+                if not streams:
+                    detail = "; ".join(errors) or "aucune interface /dev/input/event"
+                    raise OSError(f"aucune interface d’entrée accessible ({detail})")
+                descriptors = [descriptor for _node, descriptor in streams]
+                while not self.test_stop_event.is_set():
+                    readable, _writable, _exceptional = select.select(
+                        descriptors, [], [], 0.25,
+                    )
+                    events = []
+                    for descriptor in readable:
+                        node = next(node for node, current in streams if current == descriptor)
+                        try:
+                            data = os.read(descriptor, INPUT_EVENT.size * 64)
+                        except BlockingIOError:
+                            continue
+                        for offset in range(0, len(data) - INPUT_EVENT.size + 1,
+                                            INPUT_EVENT.size):
+                            seconds, micros, event_type, code, value = INPUT_EVENT.unpack_from(
+                                data, offset,
+                            )
+                            if event_type:
+                                events.append({
+                                    "node": node, "seconds": seconds, "micros": micros,
+                                    "type": event_type, "code": code, "value": value,
+                                })
+                    if events:
+                        GLib.idle_add(
+                            self.input_test_batch, generation, device,
+                            {"events": events}, None,
+                        )
+            except (OSError, ValueError) as error:
+                GLib.idle_add(
+                    self.input_test_batch, generation, device, None, str(error),
+                )
+            finally:
+                for _node, descriptor in streams:
+                    os.close(descriptor)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def stop_input_test(self, message=None):
+        if not hasattr(self, "test_toggle"):
+            return
+        self.test_stop_event.set()
+        self.test_generation += 1
+        self.test_running = False
+        self.test_toggle.set_label("Démarrer")
+        self.test_toggle.remove_css_class("destructive-action")
+        self.test_toggle.add_css_class("suggested-action")
+        self.test_activity_bar.set_fraction(0)
+        if message:
+            self.test_status.set_text(message)
+
+    def clear_input_test(self, _button=None):
+        self.test_log_lines.clear()
+        self.test_previous_keys.clear()
+        self.test_log_label.set_text("Aucun événement")
+        self.test_activity_value.set_text("—")
+        self.test_activity_bar.set_fraction(0)
+
+    def append_test_event(self, text):
+        self.test_log_lines.append(f"{time.strftime('%H:%M:%S')}  {text}")
+        self.test_log_lines = self.test_log_lines[-60:]
+        self.test_log_label.set_text("\n".join(reversed(self.test_log_lines)))
+
+    def input_test_batch(self, generation, device, result, error):
+        if generation != self.test_generation or not self.test_running:
+            return False
+        if error:
+            self.stop_input_test(f"Test indisponible : {error}")
+            return False
+        events = (result or {}).get("events") or []
+        for event in events:
+            summary = decode_input_event(event)
+            if not summary:
+                continue
+            self.test_activity_value.set_text(summary)
+            self.append_test_event(summary)
+            self.test_activity_bar.pulse()
+        reports = (result or {}).get("reports") or []
+        for report in reports:
+            summary = summarize_hid_report(device.get("class"), report)
+            self.test_activity_value.set_text(summary)
+            if device.get("class") == "keyboard":
+                keys = keyboard_report_keys(report)
+                for key in sorted(keys - self.test_previous_keys):
+                    self.append_test_event(f"Touche pressée · {key}")
+                for key in sorted(self.test_previous_keys - keys):
+                    self.append_test_event(f"Touche relâchée · {key}")
+                self.test_previous_keys = keys
+            else:
+                self.append_test_event(summary)
+            self.test_activity_bar.pulse()
+        if events or reports:
+            self.test_status.set_text(
+                f"Test actif · {len(self.test_log_lines)} événement(s) affiché(s) · lecture seule"
+            )
+        return False
+
     def refresh(self):
         daemon_devices = pericored_inventory()
+        self.refresh_test_devices(daemon_devices)
         groups = device_groups(daemon_devices)
         total = sum(len(items) for _title, _subtitle, items, _kind in groups)
         source = "pericored" if daemon_devices is not None else "détection locale"

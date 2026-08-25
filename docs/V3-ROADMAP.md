@@ -29,9 +29,10 @@ réglages, sauvegardes, manifeste et installateur.
 - application atomique et annulation immédiate.
 
 État : le centre de contrôle matériel existe dans `config/v3/device-center.py`.
-Il détecte les périphériques via `lsusb`, `libinput`/`evtest` et `hyprctl`, puis
-indique les backends disponibles (`ddcutil`, OpenRGB, evdev/uinput). Les commandes
-propriétaires ne sont jamais envoyées sans backend identifié.
+Il consomme en priorité l’inventaire physique agrégé par `pericored`, sépare les
+interfaces clavier, souris et manette externes, puis conserve les outils Debian
+comme repli. L’onglet Affichage ouvre MPVpaper Engine. Les commandes propriétaires
+ne sont jamais envoyées sans backend et protocole identifiés.
 
 ### 3. Profils de session
 
@@ -56,6 +57,10 @@ propriétaires ne sont jamais envoyées sans backend identifié.
 - [x] registre de drivers avec `generic-hid` prioritaire et fallback lecture seule ;
 - [x] CLI `periphx inspect` sans envoi de reports propriétaires ;
 - [x] descripteurs HID décodés, empreinte SHA-256, interfaces physiques et tests ;
+- [x] agrégation des nœuds `event`, `mouse` et `hidraw` d’un périphérique physique ;
+- [x] capture bornée des reports entrants avec ouverture `O_RDONLY` uniquement ;
+- [x] manifests de pilotes custom stricts, atomiques et limités à la lecture ;
+- [x] socket utilisateur privé, requêtes IPC bornées et service systemd durci ;
 - [ ] premier driver matériel avec opérations d écriture validées.
 
 ### 4. Thèmes et couleurs
@@ -75,8 +80,10 @@ propriétaires ne sont jamais envoyées sans backend identifié.
 
 - [x] structure et manifeste V3 ;
 - [x] application graphique de détection des périphériques ;
-- [ ] installateur V3 ;
-- [ ] centre de personnalisation ;
+- [x] installateur V3 isolé, mode simulation et restauration ;
+- [x] centre matériel PeriphX et lien vers le moteur d’affichage ;
+- [x] moteur couleur MPVpaper temps réel et profils par écran ;
+- [ ] centre de personnalisation unifié complet ;
 - [ ] profils de session ;
 - [ ] moteur de thèmes V3 ;
 - [ ] validation de coexistence.

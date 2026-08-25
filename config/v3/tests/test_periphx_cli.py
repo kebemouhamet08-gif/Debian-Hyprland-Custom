@@ -1,8 +1,11 @@
 import contextlib
 import importlib.util
 import io
+import json
 import pathlib
+import tempfile
 import unittest
+from unittest import mock
 
 
 MODULE_PATH = pathlib.Path(__file__).parents[1] / "periphx.py"
@@ -72,6 +75,59 @@ class PeriphxCliTests(unittest.TestCase):
         self.assertIn("Interface 01", rendered)
         self.assertIn("/dev/hidraw2", rendered)
         self.assertIn("64 bytes", rendered)
+
+    def test_custom_driver_install_and_update_are_atomic(self):
+        manifest = {
+            "schema_version": 1,
+            "name": "test-mouse",
+            "version": "1.0.0",
+            "match": {
+                "vendor_id": "1234",
+                "product_id": "5678",
+                "interface_number": "01",
+            },
+            "capabilities": ["device.info", "hid.inspect"],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            source = root / "source.json"
+            source.write_text(json.dumps(manifest), encoding="utf-8")
+            with mock.patch.dict("os.environ", {"XDG_CONFIG_HOME": str(root / "config")}):
+                target = PERIPHX.install_driver_manifest(source)
+                self.assertTrue(target.is_file())
+                self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+                manifest["version"] = "1.1.0"
+                source.write_text(json.dumps(manifest), encoding="utf-8")
+                PERIPHX.install_driver_manifest(source, update=True)
+                self.assertEqual(PERIPHX.load_driver_manifest(target)["version"], "1.1.0")
+
+    def test_custom_driver_rejects_writable_capability(self):
+        manifest = {
+            "schema_version": 1,
+            "name": "unsafe-mouse",
+            "version": "1.0.0",
+            "match": {"vendor_id": "1234", "product_id": "5678"},
+            "capabilities": ["mouse.dpi.write"],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            source = pathlib.Path(temporary) / "unsafe.json"
+            source.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                PERIPHX.load_driver_manifest(source)
+
+    def test_custom_driver_rejects_malformed_types_cleanly(self):
+        manifest = {
+            "schema_version": True,
+            "name": ["not-a-name"],
+            "version": "1.0.0",
+            "match": {"vendor_id": "1234", "product_id": "5678"},
+            "capabilities": [{}],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            source = pathlib.Path(temporary) / "malformed.json"
+            source.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                PERIPHX.load_driver_manifest(source)
 
 
 if __name__ == "__main__":

@@ -58,6 +58,10 @@ periphx-cli inspect DEVICE_ID
 periphx-cli interfaces DEVICE_ID
 ```
 
+Des manifests de pilotes custom peuvent être validés, installés et mis à jour en
+lecture seule. Le format et ses garanties de sécurité sont décrits dans
+[`docs/PERIPHX-CUSTOM-DRIVERS.md`](docs/PERIPHX-CUSTOM-DRIVERS.md).
+
 Il affiche les périphériques USB/HID, Bluetooth, claviers, souris, écrans et manettes détectés
 par Debian. Les capacités DDC/CI, OpenRGB, evdev/uinput et les profils sont
 indiqués séparément ; un périphérique propriétaire ne sera pas piloté sans backend

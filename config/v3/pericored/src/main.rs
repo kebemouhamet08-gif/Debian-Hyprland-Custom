@@ -343,6 +343,22 @@ fn merge_record(existing: &mut DeviceRecord, incoming: DeviceRecord) {
 }
 
 impl DeviceRegistry {
+    fn apply_driver(&self, record: &mut DeviceRecord) {
+        let driver = self.driver_registry.select(record);
+        record.driver = driver.name().to_string();
+        record.capabilities = driver
+            .capabilities(record)
+            .into_iter()
+            .map(|capability| {
+                if capability.writable {
+                    format!("{}.write", capability.name)
+                } else {
+                    capability.name
+                }
+            })
+            .collect();
+    }
+
     fn add(&mut self, record: DeviceRecord) {
         let id = record.id.clone();
         let mut merged = if let Some(mut existing) = self.devices.remove(&id) {
@@ -351,19 +367,7 @@ impl DeviceRegistry {
         } else {
             record
         };
-        let driver = self.driver_registry.select(&merged);
-        merged.driver = driver.name().to_string();
-        merged.capabilities = driver
-            .capabilities(&merged)
-            .into_iter()
-            .map(|capability| {
-                if capability.writable {
-                    format!("{}.write", capability.name)
-                } else {
-                    capability.name.to_string()
-                }
-            })
-            .collect();
+        self.apply_driver(&mut merged);
         for node in &merged.nodes {
             self.nodes.insert(node.clone(), id.clone());
         }
@@ -397,6 +401,17 @@ impl DeviceRegistry {
     fn device(&self, id: &str) -> Option<&DeviceRecord> {
         self.devices.get(id).filter(|device| device.connected)
     }
+
+    fn reload_drivers(&mut self) {
+        self.driver_registry = drivers::DriverRegistry::default();
+        let ids: Vec<_> = self.devices.keys().cloned().collect();
+        for id in ids {
+            if let Some(mut device) = self.devices.remove(&id) {
+                self.apply_driver(&mut device);
+                self.devices.insert(id, device);
+            }
+        }
+    }
 }
 
 fn socket_path() -> PathBuf {
@@ -423,7 +438,7 @@ fn error_response(request_id: Option<String>, code: &str, message: &str) -> serd
 }
 
 fn handle_request(request: Request, registry: &SharedRegistry) -> serde_json::Value {
-    let guard = match registry.lock() {
+    let mut guard = match registry.lock() {
         Ok(guard) => guard,
         Err(_) => {
             return error_response(
@@ -458,8 +473,8 @@ fn handle_request(request: Request, registry: &SharedRegistry) -> serde_json::Va
             request.request_id,
             serde_json::json!({
                 "device_count": guard.devices.values().filter(|device| device.connected).count(),
-                "supported": ["ping", "version", "list_devices", "get_device", "get_capabilities", "get_state", "inspect", "get_hid_interfaces", "set_property", "apply_profile"],
-                "drivers": ["generic-hid", "generic-input", "read-only"],
+                "supported": ["ping", "version", "list_devices", "get_device", "get_capabilities", "get_state", "inspect", "get_hid_interfaces", "reload_drivers", "set_property", "apply_profile"],
+                "drivers": guard.driver_registry.names(),
             }),
         ),
         "GetState" | "get_state" => {
@@ -491,6 +506,13 @@ fn handle_request(request: Request, registry: &SharedRegistry) -> serde_json::Va
                 ),
                 None => error_response(request.request_id, "not_found", "device not found"),
             }
+        }
+        "ReloadDrivers" | "reload_drivers" => {
+            guard.reload_drivers();
+            response(
+                request.request_id,
+                serde_json::json!({"drivers": guard.driver_registry.names()}),
+            )
         }
         "Inspect" | "inspect" => {
             let device_id = request

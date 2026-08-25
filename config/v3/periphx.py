@@ -3,8 +3,11 @@
 import argparse
 import json
 import os
+import re
 import socket
 import sys
+import tempfile
+from pathlib import Path
 
 
 def socket_path():
@@ -72,6 +75,124 @@ def print_interfaces(result):
         print(f"  Descriptor: {interface.get('descriptor_size', 0)} bytes")
 
 
+READ_ONLY_DRIVER_CAPABILITIES = {
+    "device.info",
+    "hid.inspect",
+    "hid.report_descriptor",
+}
+
+
+def custom_driver_directory():
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return config_home / "periphx" / "drivers.d"
+
+
+def load_driver_manifest(path):
+    path = Path(path)
+    if path.stat().st_size > 256 * 1024:
+        raise ValueError("manifest trop volumineux")
+    with path.open(encoding="utf-8") as stream:
+        manifest = json.load(stream)
+    allowed = {"schema_version", "name", "version", "match", "capabilities"}
+    if not isinstance(manifest, dict) or set(manifest) != allowed:
+        raise ValueError("clés de manifest invalides")
+    if type(manifest["schema_version"]) is not int or manifest["schema_version"] != 1:
+        raise ValueError("schema_version non pris en charge")
+    if not isinstance(manifest["name"], str) or not re.fullmatch(
+        r"[A-Za-z0-9_.-]{3,64}", manifest["name"]
+    ):
+        raise ValueError("nom de pilote invalide")
+    if not isinstance(manifest["version"], str) or not 0 < len(manifest["version"]) <= 32:
+        raise ValueError("version de pilote invalide")
+    match = manifest["match"]
+    if not isinstance(match, dict) or not set(match).issubset({
+        "vendor_id", "product_id", "descriptor_sha256", "interface_number"
+    }):
+        raise ValueError("bloc match invalide")
+    if not {"vendor_id", "product_id"}.issubset(match):
+        raise ValueError("VID et PID sont obligatoires")
+    for key in ("vendor_id", "product_id"):
+        if not isinstance(match[key], str) or not re.fullmatch(
+            r"(?:0x)?[0-9A-Fa-f]{4}", match[key]
+        ):
+            raise ValueError(f"{key} doit contenir quatre chiffres hexadécimaux")
+    descriptor_hash = match.get("descriptor_sha256")
+    if descriptor_hash is not None and (
+        not isinstance(descriptor_hash, str)
+        or not re.fullmatch(r"[0-9A-Fa-f]{64}", descriptor_hash)
+    ):
+        raise ValueError("descriptor_sha256 invalide")
+    interface_number = match.get("interface_number")
+    if interface_number is not None and (
+        not isinstance(interface_number, str)
+        or not re.fullmatch(r"[0-9A-Fa-f]{2}", interface_number)
+    ):
+        raise ValueError("interface_number invalide")
+    capabilities = manifest["capabilities"]
+    if not isinstance(capabilities, list) or not capabilities or any(
+        not isinstance(capability, str)
+        or capability not in READ_ONLY_DRIVER_CAPABILITIES
+        for capability in capabilities
+    ):
+        raise ValueError("seules les capacités HID en lecture seule sont autorisées")
+    return manifest
+
+
+def install_driver_manifest(source, update=False):
+    manifest = load_driver_manifest(source)
+    directory = custom_driver_directory()
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    directory.chmod(0o700)
+    target = directory / f"{manifest['name']}.json"
+    if update and not target.exists():
+        raise ValueError("pilote absent : utilisez drivers install")
+    if not update and target.exists():
+        raise ValueError("pilote déjà installé : utilisez drivers update")
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=directory, prefix=".driver-", delete=False
+        ) as stream:
+            temporary = Path(stream.name)
+            json.dump(manifest, stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.chmod(0o600)
+        os.replace(temporary, target)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+    return target
+
+
+def reload_drivers():
+    try:
+        request("reload_drivers")
+        return True
+    except (OSError, RuntimeError, json.JSONDecodeError):
+        return False
+
+
+def list_driver_manifests():
+    directory = custom_driver_directory()
+    result = []
+    if not directory.is_dir():
+        return result
+    for path in sorted(directory.glob("*.json")):
+        try:
+            manifest = load_driver_manifest(path)
+            result.append({
+                "name": manifest["name"],
+                "version": manifest["version"],
+                "path": str(path),
+                "valid": True,
+            })
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            result.append({"path": str(path), "valid": False, "error": str(error)})
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(prog="periphx", description="Client CLI PeriphX")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -88,6 +209,19 @@ def main():
     )
     interfaces.add_argument("device_id")
     interfaces.add_argument("--json", action="store_true", help="sortie JSON complète")
+    drivers = subparsers.add_parser(
+        "drivers", help="gère les manifests de pilotes custom en lecture seule"
+    )
+    driver_actions = drivers.add_subparsers(dest="driver_action", required=True)
+    driver_actions.add_parser("list", help="liste les manifests locaux")
+    validate_driver = driver_actions.add_parser("validate", help="valide un manifest")
+    validate_driver.add_argument("manifest")
+    install_driver = driver_actions.add_parser("install", help="installe un nouveau manifest")
+    install_driver.add_argument("manifest")
+    update_driver = driver_actions.add_parser("update", help="met à jour un manifest existant")
+    update_driver.add_argument("manifest")
+    remove_driver = driver_actions.add_parser("remove", help="retire un manifest local")
+    remove_driver.add_argument("name")
     subparsers.add_parser("capabilities", help="affiche les capacités du daemon")
     args = parser.parse_args()
     try:
@@ -111,9 +245,36 @@ def main():
                 print_json(result)
             else:
                 print_interfaces(result)
+        elif args.command == "drivers":
+            if args.driver_action == "list":
+                print_json(list_driver_manifests())
+            elif args.driver_action == "validate":
+                manifest = load_driver_manifest(args.manifest)
+                print_json({"valid": True, "name": manifest["name"], "safety": "read-only"})
+            elif args.driver_action in ("install", "update"):
+                target = install_driver_manifest(
+                    args.manifest, update=args.driver_action == "update"
+                )
+                reloaded = reload_drivers()
+                print_json({
+                    "installed": str(target),
+                    "daemon_reloaded": reloaded,
+                    "safety": "read-only",
+                })
+            else:
+                if not re.fullmatch(r"[A-Za-z0-9_.-]{3,64}", args.name):
+                    raise ValueError("nom de pilote invalide")
+                target = custom_driver_directory() / f"{args.name}.json"
+                if not target.is_file():
+                    raise ValueError("pilote custom introuvable")
+                target.unlink()
+                print_json({
+                    "removed": str(target),
+                    "daemon_reloaded": reload_drivers(),
+                })
         else:
             print_json(request("get_capabilities"))
-    except (OSError, RuntimeError, json.JSONDecodeError) as error:
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
         print(f"periphx: {error}", file=sys.stderr)
         return 1
     return 0

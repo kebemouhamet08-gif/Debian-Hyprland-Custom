@@ -899,13 +899,19 @@ def bounded_config_number(value, default, minimum, maximum, number_type=int):
     return max(minimum, min(maximum, parsed))
 
 
+def valid_output_name(value):
+    return isinstance(value, str) and bool(re.fullmatch(
+        r"(?:\*|[A-Za-z0-9][A-Za-z0-9_.-]{0,127})", value
+    ))
+
+
 def normalize_config_profile(data, output="*"):
     source = data if isinstance(data, dict) else {}
     profile = dict(DEFAULT_CONFIG)
     wallpaper = source.get("wallpaper", "")
     profile["wallpaper"] = wallpaper if isinstance(wallpaper, str) else ""
     requested_output = source.get("output", output)
-    profile["output"] = requested_output if isinstance(requested_output, str) and 0 < len(requested_output) <= 128 else output
+    profile["output"] = requested_output if valid_output_name(requested_output) else output
     profile["volume"] = bounded_config_number(source.get("volume"), 0, 0, 100)
     profile["speed"] = bounded_config_number(source.get("speed"), 1.0, 0.1, 5.0, float)
     for key in ("loop", "hardware_decode", "auto_pause", "autostart"):
@@ -928,7 +934,7 @@ def load_config():
     config["assignments"] = {}
     if isinstance(assignments, dict):
         for output, assignment in assignments.items():
-            if not isinstance(output, str) or not 0 < len(output) <= 128 or not isinstance(assignment, dict):
+            if not valid_output_name(output) or not isinstance(assignment, dict):
                 continue
             profile = normalize_config_profile(assignment, output=output)
             config["assignments"][output] = {

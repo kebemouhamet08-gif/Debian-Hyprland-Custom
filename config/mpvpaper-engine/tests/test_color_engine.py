@@ -43,7 +43,7 @@ class ColorEngineTests(unittest.TestCase):
     def test_malformed_config_is_normalized_without_crashing(self):
         malformed = {
             "wallpaper": ["not-a-path"],
-            "output": None,
+            "output": "../../unsafe-output",
             "volume": "invalide",
             "speed": float("inf"),
             "gamma": 900,

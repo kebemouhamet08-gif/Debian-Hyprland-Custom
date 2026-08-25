@@ -8,6 +8,18 @@ ExecStart=%h/.local/bin/pericored
 Restart=on-failure
 RestartSec=2
 RuntimeDirectory=periphx
+RuntimeDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
 
 [Install]
 WantedBy=default.target

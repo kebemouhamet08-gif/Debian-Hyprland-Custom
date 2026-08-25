@@ -24,10 +24,12 @@ desktop_target="$desktop_dir/io.github.kebemouhamet08.PeriphX.desktop"
 shell_config="$HOME/.zshrc"
 pericore_manifest="$repo_dir/config/v3/pericored/Cargo.toml"
 pericore_binary="$repo_dir/config/v3/pericored/target/release/pericored"
+pericore_target="$install_dir/pericored"
 pericore_command="$bin_dir/pericored"
 service_dir="$config_home/systemd/user"
 service_target="$service_dir/pericored.service"
 dry_run=0
+path_marker="$state_dir/path-added-by-installer"
 
 usage() {
     cat <<'EOF'
@@ -84,19 +86,15 @@ install_v3() {
         log_action "installer $cli_source vers $cli_target"
         log_action "installer le lanceur $app_command"
         log_action "installer $desktop_source vers $desktop_target"
-        log_action "compiler pericored avec cargo +stable"
-        log_action "lier $pericore_command vers $pericore_binary"
+        log_action "compiler pericored avec cargo"
+        log_action "installer pericored vers $pericore_target"
+        log_action "lier $pericore_command vers $pericore_target"
         log_action "installer et activer $service_target"
         log_action "initialiser $state_file et $history_file"
         return
     fi
     mkdir -p "$state_dir" "$install_dir" "$bin_dir" "$desktop_dir" "$service_dir"
-    if command -v cargo >/dev/null 2>&1; then
-        cargo +stable build --release --manifest-path "$pericore_manifest"
-        ln -sfn "$pericore_binary" "$pericore_command"
-    else
-        printf 'INFO     cargo absent : pericored non compilé\n'
-    fi
+    build_pericored
     install -m 0755 "$app_source" "$app_target"
     install -m 0755 "$cli_source" "$cli_target"
     write_launcher
@@ -104,8 +102,7 @@ install_v3() {
     ln -sfn "$launcher_target" "$legacy_command"
     ln -sfn "$cli_target" "$bin_dir/periphx-cli"
     install -m 0644 "$service_source" "$service_target"
-    systemctl --user daemon-reload >/dev/null 2>&1 || true
-    systemctl --user enable --now pericored.service >/dev/null 2>&1 || true
+    enable_pericored
     ensure_local_bin_path
     install -m 0644 "$desktop_source" "$desktop_target"
     update-desktop-database "$desktop_dir" >/dev/null 2>&1 || true
@@ -128,14 +125,40 @@ dev_v3() {
     ln -sfn "$launcher_target" "$legacy_command"
     install -m 0755 "$cli_source" "$cli_target"
     ln -sfn "$cli_target" "$bin_dir/periphx-cli"
+    build_pericored
     install -m 0644 "$service_source" "$service_target"
-    systemctl --user daemon-reload >/dev/null 2>&1 || true
+    enable_pericored
     install -m 0644 "$desktop_source" "$desktop_target"
     update-desktop-database "$desktop_dir" >/dev/null 2>&1 || true
     ensure_local_bin_path
     printf 'Mode développement PeriphX activé.\n'
     printf 'Source suivie directement : %s\n' "$app_source"
     printf 'Lancement : %s\n' "$app_command"
+}
+
+build_pericored() {
+    if ! command -v cargo >/dev/null 2>&1; then
+        printf 'INFO     cargo absent : pericored non compilé\n'
+        return
+    fi
+    cargo build --release --manifest-path "$pericore_manifest"
+    install -m 0755 "$pericore_binary" "$pericore_target.new"
+    mv -f "$pericore_target.new" "$pericore_target"
+    ln -sfn "$pericore_target" "$pericore_command"
+}
+
+enable_pericored() {
+    if ! command -v systemctl >/dev/null 2>&1; then
+        printf 'INFO     systemd utilisateur absent : lancez %s manuellement\n' "$pericore_command"
+        return
+    fi
+    if ! systemctl --user daemon-reload >/dev/null 2>&1; then
+        printf 'INFO     bus systemd utilisateur indisponible : service non activé\n'
+        return
+    fi
+    if [ -x "$pericore_target" ] && ! systemctl --user enable --now pericored.service >/dev/null 2>&1; then
+        printf 'ATTENTION impossible d activer pericored.service ; consultez systemctl --user status pericored\n' >&2
+    fi
 }
 
 write_launcher() {
@@ -155,6 +178,7 @@ ensure_local_bin_path() {
         return
     fi
     printf '\n# PeriphX V3\n%s\n' "$path_line" >>"$shell_config"
+    : >"$path_marker"
     printf 'PATH Zsh ajouté dans %s\n' "$shell_config"
 }
 
@@ -181,10 +205,15 @@ restore_v3() {
         log_action "supprimer l'état V3 $state_dir"
         return
     fi
-    systemctl --user disable --now pericored.service >/dev/null 2>&1 || true
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user disable --now pericored.service >/dev/null 2>&1 || true
+    fi
+    if [ -f "$path_marker" ] && [ -f "$shell_config" ]; then
+        sed -i '/^# PeriphX V3$/{N;/export PATH="\$HOME\/\.local\/bin:\$PATH"/d;}' "$shell_config"
+    fi
     rm -f "$app_command" "$legacy_command" "$desktop_target" "$app_target" \
         "$cli_target" "$bin_dir/periphx-cli" "$launcher_target" "$pericore_command" \
-        "$service_target"
+        "$pericore_target" "$pericore_target.new" "$service_target"
     rm -rf "$state_dir"
     printf 'État V3 supprimé. Les fichiers V1 et V2 n ont pas été touchés.\n'
 }

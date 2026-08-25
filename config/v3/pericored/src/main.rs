@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
@@ -15,6 +15,8 @@ use udev::{Device, Enumerator, EventType, MonitorBuilder};
 mod drivers;
 mod hid;
 mod monitor;
+
+const MAX_IPC_REQUEST_BYTES: u64 = 256 * 1024;
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -467,6 +469,15 @@ fn error_response(request_id: Option<String>, code: &str, message: &str) -> serd
     })
 }
 
+fn read_ipc_line<R: BufRead>(reader: &mut R) -> std::io::Result<Option<Vec<u8>>> {
+    let mut line = Vec::new();
+    let bytes_read = reader
+        .by_ref()
+        .take(MAX_IPC_REQUEST_BYTES + 1)
+        .read_until(b'\n', &mut line)?;
+    Ok((bytes_read != 0).then_some(line))
+}
+
 fn handle_request(request: Request, registry: &SharedRegistry) -> serde_json::Value {
     if matches!(
         request.method.as_str(),
@@ -627,10 +638,15 @@ fn handle_monitor_request(request: Request, registry: &SharedRegistry) -> serde_
 }
 
 fn serve_client(mut stream: UnixStream, registry: SharedRegistry) -> Result<()> {
-    let reader = BufReader::new(stream.try_clone()?);
-    for line in reader.lines() {
-        let line = line?;
-        let result = match serde_json::from_str::<Request>(&line) {
+    let mut reader = BufReader::new(stream.try_clone()?);
+    while let Some(line) = read_ipc_line(&mut reader)? {
+        if line.len() as u64 > MAX_IPC_REQUEST_BYTES {
+            let result = error_response(None, "request_too_large", "IPC request exceeds 256 KiB");
+            writeln!(stream, "{}", serde_json::to_string(&result)?)?;
+            stream.flush()?;
+            break;
+        }
+        let result = match serde_json::from_slice::<Request>(&line) {
             Ok(request) => handle_request(request, &registry),
             Err(error) => error_response(
                 None,
@@ -802,5 +818,13 @@ mod tests {
         assert_eq!(existing.name, "Composite Touchpad");
         assert!(existing.classes.contains(&DeviceClass::Mouse));
         assert!(existing.classes.contains(&DeviceClass::Touchpad));
+    }
+
+    #[test]
+    fn ipc_reader_never_buffers_more_than_the_limit() {
+        let source = vec![b'a'; MAX_IPC_REQUEST_BYTES as usize + 10_000];
+        let mut reader = std::io::Cursor::new(source);
+        let line = read_ipc_line(&mut reader).unwrap().unwrap();
+        assert_eq!(line.len() as u64, MAX_IPC_REQUEST_BYTES + 1);
     }
 }

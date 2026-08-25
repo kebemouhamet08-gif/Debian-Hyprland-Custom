@@ -17,6 +17,7 @@ mod hid;
 mod monitor;
 
 const MAX_IPC_REQUEST_BYTES: u64 = 256 * 1024;
+const IPC_IDLE_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -638,6 +639,7 @@ fn handle_monitor_request(request: Request, registry: &SharedRegistry) -> serde_
 }
 
 fn serve_client(mut stream: UnixStream, registry: SharedRegistry) -> Result<()> {
+    configure_client_stream(&stream)?;
     let mut reader = BufReader::new(stream.try_clone()?);
     while let Some(line) = read_ipc_line(&mut reader)? {
         if line.len() as u64 > MAX_IPC_REQUEST_BYTES {
@@ -658,6 +660,11 @@ fn serve_client(mut stream: UnixStream, registry: SharedRegistry) -> Result<()> 
         stream.flush()?;
     }
     Ok(())
+}
+
+fn configure_client_stream(stream: &UnixStream) -> std::io::Result<()> {
+    stream.set_read_timeout(Some(IPC_IDLE_TIMEOUT))?;
+    stream.set_write_timeout(Some(IPC_IDLE_TIMEOUT))
 }
 
 fn start_ipc_server(registry: SharedRegistry) -> Result<()> {
@@ -834,5 +841,13 @@ mod tests {
         let mut reader = std::io::Cursor::new(source);
         let line = read_ipc_line(&mut reader).unwrap().unwrap();
         assert_eq!(line.len() as u64, MAX_IPC_REQUEST_BYTES + 1);
+    }
+
+    #[test]
+    fn ipc_clients_have_bounded_idle_time() {
+        let (stream, _peer) = UnixStream::pair().unwrap();
+        configure_client_stream(&stream).unwrap();
+        assert_eq!(stream.read_timeout().unwrap(), Some(IPC_IDLE_TIMEOUT));
+        assert_eq!(stream.write_timeout().unwrap(), Some(IPC_IDLE_TIMEOUT));
     }
 }

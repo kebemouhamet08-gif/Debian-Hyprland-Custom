@@ -700,12 +700,23 @@ fn initial_scan(registry: &mut DeviceRegistry) -> Result<()> {
 
 fn main() -> Result<()> {
     let mut initial_registry = DeviceRegistry::default();
-    let monitor = MonitorBuilder::new()?.listen()?;
+    let mut monitor_builder = MonitorBuilder::new()?;
+    for subsystem in ["input", "hidraw", "drm", "pci"] {
+        monitor_builder = monitor_builder.match_subsystem(subsystem)?;
+    }
+    let monitor = monitor_builder.listen()?;
     initial_scan(&mut initial_registry)?;
     let registry = Arc::new(Mutex::new(initial_registry));
     start_ipc_server(Arc::clone(&registry))?;
     if let Ok(registry) = registry.lock() {
-        println!("{}", registry.inventory_json("startup"));
+        println!(
+            "{}",
+            serde_json::json!({
+                "event": "daemon-started",
+                "device_count": registry.devices.values().filter(|device| device.connected).count(),
+                "drivers": registry.driver_registry.names(),
+            })
+        );
     }
 
     loop {
@@ -739,9 +750,6 @@ fn main() -> Result<()> {
                     "syspath": event.syspath().to_string_lossy(),
                 })
             );
-            if let Ok(registry) = registry.lock() {
-                println!("{}", registry.inventory_json("udev"));
-            }
         }
         if !received_event {
             thread::sleep(Duration::from_millis(100));

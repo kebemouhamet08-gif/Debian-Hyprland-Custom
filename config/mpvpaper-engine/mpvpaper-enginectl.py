@@ -10,6 +10,7 @@ import sys
 import re
 import secrets
 import socket
+import tempfile
 
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "mpvpaper-engine"
@@ -46,26 +47,75 @@ WALLPAPER_DIRS = (
 )
 
 
+def bounded_number(value, default, minimum, maximum, number_type=int):
+    try:
+        parsed = number_type(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return max(minimum, min(maximum, parsed))
+
+
+def normalize_profile(data, output="*"):
+    source = data if isinstance(data, dict) else {}
+    profile = dict(DEFAULT_CONFIG)
+    wallpaper = source.get("wallpaper", "")
+    profile["wallpaper"] = wallpaper if isinstance(wallpaper, str) else ""
+    requested_output = source.get("output", output)
+    profile["output"] = requested_output if isinstance(requested_output, str) and 0 < len(requested_output) <= 128 else output
+    profile["volume"] = bounded_number(source.get("volume"), 0, 0, 100)
+    profile["speed"] = bounded_number(source.get("speed"), 1.0, 0.1, 5.0, float)
+    for key in ("loop", "hardware_decode", "auto_pause", "autostart"):
+        if isinstance(source.get(key), bool):
+            profile[key] = source[key]
+    for key in ("brightness", "contrast", "gamma", "saturation", "hue",
+                "red_balance", "green_balance", "blue_balance"):
+        profile[key] = bounded_number(source.get(key), COLOR_DEFAULTS[key], -100, 100)
+    profile["temperature"] = bounded_number(source.get("temperature"), 6500, 1000, 40000)
+    return profile
+
+
 def load_config():
     try:
         data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         data = {}
-    config = {**DEFAULT_CONFIG, **data}
-    if "assignments" not in config:
-        config["assignments"] = {}
-        if config["wallpaper"]:
-            config["assignments"][config["output"]] = {
-                key: config[key] for key in DEFAULT_CONFIG if key != "output"
+    config = normalize_profile(data)
+    assignments = data.get("assignments") if isinstance(data, dict) else None
+    config["assignments"] = {}
+    if isinstance(assignments, dict):
+        for output, assignment in assignments.items():
+            if not isinstance(output, str) or not 0 < len(output) <= 128 or not isinstance(assignment, dict):
+                continue
+            profile = normalize_profile(assignment, output=output)
+            config["assignments"][output] = {
+                key: profile[key] for key in DEFAULT_CONFIG if key != "output"
             }
+    elif config["wallpaper"]:
+        config["assignments"] = {}
+        config["assignments"][config["output"]] = {
+            key: config[key] for key in DEFAULT_CONFIG if key != "output"
+        }
     return config
 
 
 def save_config(config):
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    temporary = CONFIG_FILE.with_suffix(".tmp")
-    temporary.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(CONFIG_FILE)
+    CONFIG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    CONFIG_DIR.chmod(0o700)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=CONFIG_DIR, prefix=".config-", delete=False
+        ) as stream:
+            temporary = Path(stream.name)
+            json.dump(config, stream, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.chmod(0o600)
+        os.replace(temporary, CONFIG_FILE)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def run(command, check=False):
@@ -130,8 +180,11 @@ def stop(output=None):
 
 
 def mpv_options(config):
-    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    RUNTIME_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    RUNTIME_DIR.chmod(0o700)
     ipc_socket = socket_for_output(config["output"])
+    if ipc_socket.exists() and not ipc_socket.is_socket():
+        raise RuntimeError(f"le chemin IPC existe mais n'est pas un socket : {ipc_socket}")
     try:
         ipc_socket.unlink()
     except FileNotFoundError:

@@ -40,6 +40,41 @@ class FakeSocket:
 
 
 class ColorEngineTests(unittest.TestCase):
+    def test_malformed_config_is_normalized_without_crashing(self):
+        malformed = {
+            "wallpaper": ["not-a-path"],
+            "output": None,
+            "volume": "invalide",
+            "speed": float("inf"),
+            "gamma": 900,
+            "temperature": "500",
+            "assignments": {"DP-1": {"contrast": "bad"}, "": {}},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            config_file = Path(directory) / "config.json"
+            config_file.write_text(json.dumps(malformed), encoding="utf-8")
+            with mock.patch.object(CONTROLLER, "CONFIG_FILE", config_file):
+                config = CONTROLLER.load_config()
+
+        self.assertEqual(config["wallpaper"], "")
+        self.assertEqual(config["output"], "*")
+        self.assertEqual(config["volume"], 0)
+        self.assertEqual(config["speed"], 5.0)
+        self.assertEqual(config["gamma"], 100)
+        self.assertEqual(config["temperature"], 1000)
+        self.assertEqual(set(config["assignments"]), {"DP-1"})
+
+    def test_save_config_is_private_and_atomic(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_dir = Path(directory) / "config"
+            config_file = config_dir / "config.json"
+            with mock.patch.object(CONTROLLER, "CONFIG_DIR", config_dir), mock.patch.object(
+                CONTROLLER, "CONFIG_FILE", config_file
+            ):
+                CONTROLLER.save_config(CONTROLLER.DEFAULT_CONFIG)
+            self.assertEqual(config_dir.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(config_file.stat().st_mode & 0o777, 0o600)
+
     def test_mpv_options_include_per_output_ipc_and_colors(self):
         with tempfile.TemporaryDirectory() as directory:
             with mock.patch.object(CONTROLLER, "RUNTIME_DIR", Path(directory)):

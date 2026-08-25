@@ -4,6 +4,7 @@ import configparser
 import fcntl
 import hashlib
 from html.parser import HTMLParser
+import io
 import json
 import math
 import os
@@ -16,6 +17,7 @@ import subprocess
 import sys
 import threading
 import time
+import tempfile
 from urllib.parse import parse_qs, quote_plus, urljoin
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -122,6 +124,27 @@ ADBLOCK_CSS = """
         display: none !important; visibility: hidden !important;
     }
 """
+
+
+def atomic_write_text(destination, contents, mode=0o600):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=destination.parent,
+            prefix=f".{destination.name}-", delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(contents)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.chmod(mode)
+        os.replace(temporary, destination)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+
+
 TAG_STOPWORDS = {
     "wallpaper", "live", "animated", "background", "video", "fond", "ecran",
     "the", "and", "for", "with", "from", "page", "https", "www", "com",
@@ -234,11 +257,9 @@ def write_gtk_theme_settings(values, dark):
         section["gtk-application-prefer-dark-theme"] = "true" if dark else "false"
         if version == "gtk-4.0":
             section.pop("gtk-modules", None)
-        settings_dir.mkdir(parents=True, exist_ok=True)
-        temporary = settings_file.with_suffix(".tmp")
-        with temporary.open("w", encoding="utf-8") as stream:
-            parser.write(stream)
-        temporary.replace(settings_file)
+        serialized = io.StringIO()
+        parser.write(serialized)
+        atomic_write_text(settings_file, serialized.getvalue())
 
 
 class TasteStore:
@@ -499,9 +520,8 @@ def save_suggestion_history(previous, current):
     history = history[-SUGGESTION_COOLDOWN:]
     try:
         RUNTIME_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-        temporary = SUGGESTION_HISTORY_FILE.with_suffix(".tmp")
-        temporary.write_text(json.dumps(history) + "\n", encoding="utf-8")
-        temporary.replace(SUGGESTION_HISTORY_FILE)
+        RUNTIME_DIR.chmod(0o700)
+        atomic_write_text(SUGGESTION_HISTORY_FILE, json.dumps(history) + "\n")
     except OSError:
         pass
 
@@ -747,14 +767,13 @@ def load_source_frontier():
 
 
 def save_source_frontier(queue, visited):
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    temporary = SOURCE_FRONTIER_FILE.with_suffix(".tmp")
-    temporary.write_text(json.dumps({
+    CONFIG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    CONFIG_DIR.chmod(0o700)
+    atomic_write_text(SOURCE_FRONTIER_FILE, json.dumps({
         "version": SOURCE_FRONTIER_VERSION,
         "queue": queue,
         "visited": sorted(visited),
-    }) + "\n", encoding="utf-8")
-    temporary.replace(SOURCE_FRONTIER_FILE)
+    }) + "\n")
 
 
 def source_host_allowed(uri, allowed_hosts):
@@ -872,25 +891,60 @@ def fetch_suggestion_thumbnail(uri, destination):
         return False
 
 
+def bounded_config_number(value, default, minimum, maximum, number_type=int):
+    try:
+        parsed = number_type(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return max(minimum, min(maximum, parsed))
+
+
+def normalize_config_profile(data, output="*"):
+    source = data if isinstance(data, dict) else {}
+    profile = dict(DEFAULT_CONFIG)
+    wallpaper = source.get("wallpaper", "")
+    profile["wallpaper"] = wallpaper if isinstance(wallpaper, str) else ""
+    requested_output = source.get("output", output)
+    profile["output"] = requested_output if isinstance(requested_output, str) and 0 < len(requested_output) <= 128 else output
+    profile["volume"] = bounded_config_number(source.get("volume"), 0, 0, 100)
+    profile["speed"] = bounded_config_number(source.get("speed"), 1.0, 0.1, 5.0, float)
+    for key in ("loop", "hardware_decode", "auto_pause", "autostart"):
+        if isinstance(source.get(key), bool):
+            profile[key] = source[key]
+    for key in ("brightness", "contrast", "gamma", "saturation", "hue",
+                "red_balance", "green_balance", "blue_balance"):
+        profile[key] = bounded_config_number(source.get(key), COLOR_DEFAULTS[key], -100, 100)
+    profile["temperature"] = bounded_config_number(source.get("temperature"), 6500, 1000, 40000)
+    return profile
+
+
 def load_config():
     try:
-        config = {**DEFAULT_CONFIG, **json.loads(CONFIG_FILE.read_text(encoding="utf-8"))}
+        data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        config = dict(DEFAULT_CONFIG)
-    if "assignments" not in config:
-        config["assignments"] = {}
-        if config["wallpaper"]:
-            config["assignments"][config["output"]] = {
-                key: config[key] for key in DEFAULT_CONFIG if key != "output"
+        data = {}
+    config = normalize_config_profile(data)
+    assignments = data.get("assignments") if isinstance(data, dict) else None
+    config["assignments"] = {}
+    if isinstance(assignments, dict):
+        for output, assignment in assignments.items():
+            if not isinstance(output, str) or not 0 < len(output) <= 128 or not isinstance(assignment, dict):
+                continue
+            profile = normalize_config_profile(assignment, output=output)
+            config["assignments"][output] = {
+                key: profile[key] for key in DEFAULT_CONFIG if key != "output"
             }
+    elif config["wallpaper"]:
+        config["assignments"][config["output"]] = {
+            key: config[key] for key in DEFAULT_CONFIG if key != "output"
+        }
     return config
 
 
 def save_config(config):
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    temporary = CONFIG_FILE.with_suffix(".tmp")
-    temporary.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(CONFIG_FILE)
+    CONFIG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    CONFIG_DIR.chmod(0o700)
+    atomic_write_text(CONFIG_FILE, json.dumps(config, indent=2) + "\n")
 
 
 def monitor_names():
@@ -1928,10 +1982,8 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             return {}
 
     def save_metadata(self):
-        METADATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-        temporary = METADATA_FILE.with_suffix(".tmp")
-        temporary.write_text(json.dumps(self.metadata, indent=2) + "\n", encoding="utf-8")
-        temporary.replace(METADATA_FILE)
+        METADATA_FILE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        atomic_write_text(METADATA_FILE, json.dumps(self.metadata, indent=2) + "\n")
 
     def load_library(self):
         while child := self.flow.get_first_child():

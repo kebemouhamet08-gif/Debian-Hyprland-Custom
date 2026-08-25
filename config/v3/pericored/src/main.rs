@@ -40,6 +40,7 @@ struct BatteryState {
 struct DeviceRecord {
     id: String,
     class: DeviceClass,
+    classes: Vec<DeviceClass>,
     name: String,
     manufacturer: Option<String>,
     vendor_id: Option<String>,
@@ -49,6 +50,7 @@ struct DeviceRecord {
     nodes: Vec<String>,
     syspath: String,
     connection: String,
+    external: bool,
     driver: String,
     capabilities: Vec<String>,
     battery: BatteryState,
@@ -168,6 +170,22 @@ fn connection(device: &Device) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
+fn is_external(device: &Device) -> bool {
+    let identity = [
+        inherited_value(device, "ID_BUS"),
+        inherited_value(device, "ID_PATH"),
+        inherited_value(device, "HID_UNIQ"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" ")
+    .to_ascii_lowercase();
+    ["usb", "bluetooth"]
+        .iter()
+        .any(|marker| identity.contains(marker))
+}
+
 fn record_from_device(device: &Device) -> Option<DeviceRecord> {
     let subsystem = device.subsystem().and_then(|value| value.to_str())?;
     if !matches!(subsystem, "input" | "hidraw" | "drm" | "pci") {
@@ -261,6 +279,7 @@ fn record_from_device(device: &Device) -> Option<DeviceRecord> {
     Some(DeviceRecord {
         id,
         class: class.clone(),
+        classes: vec![class.clone()],
         name,
         manufacturer: inherited_value(device, "ID_VENDOR_FROM_DATABASE")
             .or_else(|| inherited_value(device, "ID_VENDOR")),
@@ -272,6 +291,7 @@ fn record_from_device(device: &Device) -> Option<DeviceRecord> {
         nodes: vec![node],
         syspath,
         connection: connection(device),
+        external: is_external(device),
         driver: String::new(),
         capabilities: Vec::new(),
         battery: BatteryState {
@@ -286,10 +306,10 @@ fn record_from_device(device: &Device) -> Option<DeviceRecord> {
 
 fn class_priority(class: &DeviceClass) -> u8 {
     match class {
-        DeviceClass::Keyboard
-        | DeviceClass::Mouse
-        | DeviceClass::Touchpad
-        | DeviceClass::Gamepad => 3,
+        DeviceClass::Touchpad => 5,
+        DeviceClass::Gamepad => 4,
+        DeviceClass::Keyboard => 3,
+        DeviceClass::Mouse => 2,
         DeviceClass::Monitor | DeviceClass::Gpu => 2,
         DeviceClass::Hid => 1,
         DeviceClass::Unknown => 0,
@@ -303,7 +323,15 @@ fn useful_name(name: &str) -> bool {
 fn merge_record(existing: &mut DeviceRecord, incoming: DeviceRecord) {
     existing.connected = true;
     if class_priority(&incoming.class) > class_priority(&existing.class) {
-        existing.class = incoming.class;
+        existing.class = incoming.class.clone();
+        if useful_name(&incoming.name) {
+            existing.name = incoming.name.clone();
+        }
+    }
+    for class in incoming.classes {
+        if !existing.classes.contains(&class) {
+            existing.classes.push(class);
+        }
     }
     if useful_name(&incoming.name) && !useful_name(&existing.name) {
         existing.name = incoming.name;
@@ -323,6 +351,7 @@ fn merge_record(existing: &mut DeviceRecord, incoming: DeviceRecord) {
     if existing.connection == "unknown" {
         existing.connection = incoming.connection;
     }
+    existing.external |= incoming.external;
     if existing.hid.is_none() {
         existing.hid = incoming.hid;
     }
@@ -711,7 +740,8 @@ mod tests {
     fn record(class: DeviceClass, name: &str, node: &str) -> DeviceRecord {
         DeviceRecord {
             id: "usb:1234:5678:serial".to_string(),
-            class,
+            class: class.clone(),
+            classes: vec![class],
             name: name.to_string(),
             manufacturer: None,
             vendor_id: Some("1234".to_string()),
@@ -721,6 +751,7 @@ mod tests {
             nodes: vec![node.to_string()],
             syspath: "/sys/test/device".to_string(),
             connection: "usb".to_string(),
+            external: true,
             driver: String::new(),
             capabilities: Vec::new(),
             battery: BatteryState {
@@ -756,5 +787,20 @@ mod tests {
             .capabilities
             .iter()
             .any(|item| item.ends_with(".write")));
+    }
+
+    #[test]
+    fn touchpad_interface_promotes_mouse_identity() {
+        let mut existing = record(DeviceClass::Mouse, "Composite Mouse", "/dev/input/event1");
+        let incoming = record(
+            DeviceClass::Touchpad,
+            "Composite Touchpad",
+            "/dev/input/event2",
+        );
+        merge_record(&mut existing, incoming);
+        assert_eq!(existing.class, DeviceClass::Touchpad);
+        assert_eq!(existing.name, "Composite Touchpad");
+        assert!(existing.classes.contains(&DeviceClass::Mouse));
+        assert!(existing.classes.contains(&DeviceClass::Touchpad));
     }
 }

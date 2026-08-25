@@ -44,7 +44,7 @@ impl DeviceDriver for GenericHidDriver {
             name: "hid.report_descriptor".to_string(),
             writable: false,
         });
-        add_input_capability(&mut capabilities, &device.class);
+        add_input_capabilities(&mut capabilities, device);
         capabilities
     }
 }
@@ -69,24 +69,26 @@ impl DeviceDriver for GenericInputDriver {
             name: "device.info".to_string(),
             writable: false,
         }];
-        add_input_capability(&mut capabilities, &device.class);
+        add_input_capabilities(&mut capabilities, device);
         capabilities
     }
 }
 
-fn add_input_capability(capabilities: &mut Vec<Capability>, class: &DeviceClass) {
-    let name = match class {
-        DeviceClass::Keyboard => Some("keyboard.buttons"),
-        DeviceClass::Mouse => Some("mouse.buttons"),
-        DeviceClass::Touchpad => Some("touchpad.gestures"),
-        DeviceClass::Gamepad => Some("gamepad.axes"),
-        _ => None,
-    };
-    if let Some(name) = name {
-        capabilities.push(Capability {
-            name: name.to_string(),
-            writable: false,
-        });
+fn add_input_capabilities(capabilities: &mut Vec<Capability>, device: &DeviceRecord) {
+    for class in &device.classes {
+        let name = match class {
+            DeviceClass::Keyboard => Some("keyboard.buttons"),
+            DeviceClass::Mouse => Some("mouse.buttons"),
+            DeviceClass::Touchpad => Some("touchpad.gestures"),
+            DeviceClass::Gamepad => Some("gamepad.axes"),
+            _ => None,
+        };
+        if let Some(name) = name {
+            capabilities.push(Capability {
+                name: name.to_string(),
+                writable: false,
+            });
+        }
     }
 }
 

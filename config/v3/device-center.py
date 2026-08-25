@@ -21,9 +21,11 @@ NO_DAEMON_CHECK = object()
 
 def is_external_peripheral(device):
     """Limit PeriphX management to external input peripherals."""
-    device_class = device.get("class", "unknown")
-    if device_class not in MANAGED_DEVICE_CLASSES:
+    device_classes = set(device.get("classes") or [device.get("class", "unknown")])
+    if not device_classes.intersection(MANAGED_DEVICE_CLASSES):
         return False
+    if isinstance(device.get("external"), bool):
+        return device["external"]
 
     identity = " ".join(str(device.get(field) or "") for field in (
         "connection", "syspath", "id", "name",
@@ -39,7 +41,7 @@ def is_external_peripheral(device):
 
     # A game controller without transport metadata is still treated as external;
     # keyboards and mice must provide positive external-device evidence.
-    return device_class == "gamepad"
+    return "gamepad" in device_classes
 
 
 def pericored_inventory():
@@ -76,10 +78,8 @@ def daemon_device_groups(devices=None):
         title, subtitle, kind = labels[device_class]
         grouped[(title, subtitle, kind)] = []
     for device in devices:
-        device_class = device.get("class", "unknown")
         if not is_external_peripheral(device):
             continue
-        title, subtitle, kind = labels[device_class]
         identifier = device.get("id", "")
         details = " · ".join(filter(None, (
             device.get("manufacturer"),
@@ -87,9 +87,15 @@ def daemon_device_groups(devices=None):
             device.get("product_id"),
             identifier,
         )))
-        item = dict(device)
-        item["display_label"] = f"{device.get('name', 'Périphérique')} · {details}"
-        grouped.setdefault((title, subtitle, kind), []).append(item)
+        device_classes = device.get("classes") or [device.get("class", "unknown")]
+        for device_class in MANAGED_DEVICE_CLASSES:
+            if device_class not in device_classes:
+                continue
+            title, subtitle, kind = labels[device_class]
+            item = dict(device)
+            item["class"] = device_class
+            item["display_label"] = f"{device.get('name', 'Périphérique')} · {details}"
+            grouped.setdefault((title, subtitle, kind), []).append(item)
     return [(title, subtitle, items, kind) for (title, subtitle, kind), items in grouped.items()]
 
 

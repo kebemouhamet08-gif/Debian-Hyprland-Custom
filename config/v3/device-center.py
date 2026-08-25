@@ -790,11 +790,24 @@ class DeviceCenter(Adw.ApplicationWindow):
 
     def capture_hid_interface(self, button, device_id, interface_id):
         button.set_sensitive(False)
-        try:
-            result = periphx_cli_json(
-                "capture", device_id, "--interface", interface_id,
-                "--duration-ms", "1000", "--max-reports", "16", "--json",
-            )
+        self.capture_status.set_text("Capture en cours pendant 1 seconde…")
+
+        def worker():
+            try:
+                result = periphx_cli_json(
+                    "capture", device_id, "--interface", interface_id,
+                    "--duration-ms", "1000", "--max-reports", "16", "--json",
+                )
+                GLib.idle_add(self.capture_hid_finished, button, result, None)
+            except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+                GLib.idle_add(self.capture_hid_finished, button, None, str(error))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def capture_hid_finished(self, button, result, error):
+        if error:
+            self.capture_status.set_text(f"Capture indisponible : {error}")
+        else:
             reports = result.get("reports") or []
             if reports:
                 lines = [
@@ -804,10 +817,8 @@ class DeviceCenter(Adw.ApplicationWindow):
                 self.capture_status.set_text("\n".join(lines))
             else:
                 self.capture_status.set_text("Aucun report reçu pendant 1 seconde · lecture seule")
-        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
-            self.capture_status.set_text(f"Capture indisponible : {error}")
-        finally:
-            button.set_sensitive(True)
+        button.set_sensitive(True)
+        return False
 
     def refresh(self):
         daemon_devices = pericored_inventory()

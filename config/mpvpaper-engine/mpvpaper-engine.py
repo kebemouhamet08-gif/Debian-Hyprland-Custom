@@ -282,9 +282,11 @@ def write_gtk_theme_settings(values, dark):
         section["gtk-theme-name"] = values["gtk-theme"]
         section["gtk-icon-theme-name"] = values["icon-theme"]
         section["gtk-cursor-theme-name"] = values["cursor-theme"]
-        section["gtk-application-prefer-dark-theme"] = "true" if dark else "false"
         if version == "gtk-4.0":
             section.pop("gtk-modules", None)
+            section.pop("gtk-application-prefer-dark-theme", None)
+        else:
+            section["gtk-application-prefer-dark-theme"] = "true" if dark else "false"
         serialized = io.StringIO()
         parser.write(serialized)
         atomic_write_text(settings_file, serialized.getvalue())

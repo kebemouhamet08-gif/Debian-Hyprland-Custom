@@ -12,6 +12,11 @@ SPEC.loader.exec_module(DEVICE_CENTER)
 
 
 class DeviceCenterTests(unittest.TestCase):
+    def test_cli_command_uses_the_python_interpreter_for_local_source(self):
+        command = DEVICE_CENTER.periphx_cli_command()
+        self.assertEqual(command[0], DEVICE_CENTER.sys.executable)
+        self.assertEqual(pathlib.Path(command[1]).name, "periphx.py")
+
     def test_driver_cli_uses_read_only_manifest_commands(self):
         completed = subprocess.CompletedProcess(
             ["periphx-cli"], 0,

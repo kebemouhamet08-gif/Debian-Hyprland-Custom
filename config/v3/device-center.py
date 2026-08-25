@@ -114,22 +114,22 @@ def command_available(command):
 
 
 def periphx_cli_command():
-    installed = shutil.which("periphx-cli")
-    if installed:
-        return [installed]
     local = Path(__file__).with_name("periphx.py")
     if local.is_file():
         return [sys.executable, str(local)]
+    installed = shutil.which("periphx-cli")
+    if installed:
+        return [installed]
     fallback = Path.home() / ".local" / "lib" / "debian-next-v3" / "periphx.py"
     return [sys.executable, str(fallback)] if fallback.is_file() else None
 
 
-def driver_cli_json(*arguments):
+def periphx_cli_json(*arguments):
     command = periphx_cli_command()
     if not command:
         raise RuntimeError("CLI PeriphX introuvable")
     result = subprocess.run(
-        [*command, "drivers", *arguments], capture_output=True, text=True,
+        [*command, *arguments], capture_output=True, text=True,
         timeout=8, check=False,
     )
     if result.returncode != 0:
@@ -138,6 +138,10 @@ def driver_cli_json(*arguments):
         return json.loads(result.stdout)
     except json.JSONDecodeError as error:
         raise RuntimeError("réponse CLI PeriphX invalide") from error
+
+
+def driver_cli_json(*arguments):
+    return periphx_cli_json("drivers", *arguments)
 
 
 def bluetooth_sysfs_devices():
@@ -741,6 +745,69 @@ class DeviceCenter(Adw.ApplicationWindow):
             "Identifiant", device.get("id"), "dialog-information-symbolic",
         ))
         self.device_detail_content.append(connection)
+
+        hid_interfaces = device.get("hid_interfaces") or []
+        if hid_interfaces:
+            self.device_detail_content.append(self.section(
+                "Interfaces HID", "Sélectionnez l’interface physique à observer.",
+            ))
+            interface_rows = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL, spacing=0, css_classes=["boxed-list"],
+            )
+            for hid_interface in hid_interfaces:
+                row = Gtk.Box(
+                    orientation=Gtk.Orientation.HORIZONTAL, spacing=12,
+                    margin_top=10, margin_bottom=10, margin_start=12, margin_end=12,
+                )
+                summary = " · ".join(filter(None, (
+                    hid_interface.get("role"),
+                    hid_interface.get("interface_number"),
+                    ", ".join(hid_interface.get("nodes") or []),
+                )))
+                labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
+                labels.append(Gtk.Label(
+                    label=hid_interface.get("name") or hid_interface.get("id") or "Interface HID",
+                    xalign=0,
+                ))
+                labels.append(Gtk.Label(label=summary or "Lecture seule", xalign=0, wrap=True,
+                                        css_classes=["dim-label"]))
+                row.append(labels)
+                capture = Gtk.Button(label="Capturer 1 s")
+                interface_id = str(hid_interface.get("id") or "")
+                capture.set_sensitive(bool(device.get("id") and interface_id))
+                capture.connect(
+                    "clicked", self.capture_hid_interface,
+                    device.get("id"), interface_id,
+                )
+                row.append(capture)
+                interface_rows.append(row)
+            self.device_detail_content.append(interface_rows)
+            self.capture_status = Gtk.Label(
+                label="Aucune capture · entrée uniquement", xalign=0, wrap=True,
+                selectable=True, css_classes=["dim-label"],
+            )
+            self.device_detail_content.append(self.capture_status)
+
+    def capture_hid_interface(self, button, device_id, interface_id):
+        button.set_sensitive(False)
+        try:
+            result = periphx_cli_json(
+                "capture", device_id, "--interface", interface_id,
+                "--duration-ms", "1000", "--max-reports", "16", "--json",
+            )
+            reports = result.get("reports") or []
+            if reports:
+                lines = [
+                    f"{report.get('node', 'hidraw')} · {report.get('raw_hex', '')[:96]}"
+                    for report in reports[-8:]
+                ]
+                self.capture_status.set_text("\n".join(lines))
+            else:
+                self.capture_status.set_text("Aucun report reçu pendant 1 seconde · lecture seule")
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            self.capture_status.set_text(f"Capture indisponible : {error}")
+        finally:
+            button.set_sensitive(True)
 
     def refresh(self):
         daemon_devices = pericored_inventory()

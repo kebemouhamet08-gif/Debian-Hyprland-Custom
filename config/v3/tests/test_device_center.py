@@ -23,6 +23,21 @@ class DeviceCenterTests(unittest.TestCase):
         self.assertEqual(manifests[0]["name"], "mouse-driver")
         self.assertEqual(runner.call_args.args[0], ["periphx-cli", "drivers", "list"])
 
+    def test_capture_cli_targets_one_selected_interface(self):
+        completed = subprocess.CompletedProcess(
+            ["periphx-cli"], 0, stdout='{"reports":[],"safety":"read-only"}', stderr="",
+        )
+        with mock.patch.object(DEVICE_CENTER, "periphx_cli_command", return_value=["periphx-cli"]), \
+                mock.patch.object(DEVICE_CENTER.subprocess, "run", return_value=completed) as runner:
+            result = DEVICE_CENTER.periphx_cli_json(
+                "capture", "device-1", "--interface", "interface-2", "--json"
+            )
+        self.assertEqual(result["safety"], "read-only")
+        self.assertEqual(
+            runner.call_args.args[0],
+            ["periphx-cli", "capture", "device-1", "--interface", "interface-2", "--json"],
+        )
+
     def test_internal_keyboard_is_not_managed(self):
         self.assertFalse(DEVICE_CENTER.is_external_peripheral({
             "class": "keyboard",

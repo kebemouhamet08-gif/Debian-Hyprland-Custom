@@ -115,6 +115,39 @@ class ColorEngineTests(unittest.TestCase):
         self.assertEqual(payloads[-1]["command"][0:2], ["set_property", "vf"])
         self.assertIsInstance(fake.path, str)
 
+    def test_capture_wallpaper_requests_rendered_video_frame(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory)
+            video = runtime / "wallpaper.mp4"
+            video.write_bytes(b"video")
+
+            def fake_request(output, command):
+                self.assertEqual(output, "DP-1")
+                return {"data": str(video) if command[1] == "path" else 3.5}
+
+            def fake_run(command, **_options):
+                Path(command[-1]).write_bytes(b"png")
+                return mock.Mock(returncode=0, stderr="")
+
+            with mock.patch.object(CONTROLLER, "RUNTIME_DIR", runtime), mock.patch.object(
+                CONTROLLER, "ipc_request", side_effect=fake_request
+            ), mock.patch.object(CONTROLLER.subprocess, "run", side_effect=fake_run):
+                capture = CONTROLLER.capture_wallpaper("DP-1", CONTROLLER.DEFAULT_CONFIG)
+
+        self.assertEqual(capture.name, "DP-1.png")
+        self.assertEqual(capture.parent.name, "captures")
+
+    def test_capture_filter_contains_all_color_adjustments(self):
+        value = CONTROLLER.capture_filter({
+            **CONTROLLER.DEFAULT_CONFIG,
+            "brightness": 20,
+            "temperature": 4500,
+            "red_balance": 12,
+        })
+        self.assertIn("brightness=0.20", value)
+        self.assertIn("colortemperature=temperature=4500", value)
+        self.assertIn("rm=0.12", value)
+
 
 if __name__ == "__main__":
     unittest.main()

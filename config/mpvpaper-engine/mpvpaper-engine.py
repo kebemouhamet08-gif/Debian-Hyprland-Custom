@@ -1122,6 +1122,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.color_labels = {}
         self.color_loading = False
         self.color_update_id = None
+        self.color_capture_generation = 0
         self.cards = []
         LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -1262,6 +1263,35 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         output_row.append(self.color_output)
         page.append(output_row)
 
+        preview_card = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=10,
+            margin_top=12, margin_bottom=12, margin_start=12, margin_end=12,
+            css_classes=["color-preview-card"],
+        )
+        preview_heading = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        preview_heading.append(Gtk.Label(
+            label="Capture du fond actif", xalign=0, hexpand=True,
+            css_classes=["title-2"],
+        ))
+        self.color_capture_button = Gtk.Button(
+            label="Actualiser", icon_name="view-refresh-symbolic",
+        )
+        self.color_capture_button.connect("clicked", self.capture_color_preview)
+        preview_heading.append(self.color_capture_button)
+        preview_card.append(preview_heading)
+        self.color_preview = Gtk.Picture(
+            content_fit=Gtk.ContentFit.COVER, can_shrink=True,
+            alternative_text="Capture du fond vidéo MPVpaper",
+        )
+        self.color_preview.set_size_request(-1, 280)
+        preview_card.append(self.color_preview)
+        self.color_capture_status = Gtk.Label(
+            label="Ouvrez un fond vidéo puis cliquez sur Actualiser.",
+            xalign=0, wrap=True, css_classes=["dim-label"],
+        )
+        preview_card.append(self.color_capture_status)
+        page.append(preview_card)
+
         page.append(Gtk.Label(label="Profils rapides", xalign=0, css_classes=["title-2"]))
         presets = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE,
                               column_spacing=8, row_spacing=8,
@@ -1361,6 +1391,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
     def color_output_changed(self, _dropdown, _property):
         self.load_color_controls()
         self.color_status.set_text("")
+        self.capture_color_preview()
 
     def color_value_changed(self, _scale, key):
         self.update_color_label(key)
@@ -1399,9 +1430,45 @@ class MPVpaperWindow(Adw.ApplicationWindow):
     def colors_finished(self, result):
         if result.returncode == 0:
             self.color_status.set_text("Couleurs appliquées en direct au fond vidéo.")
+            self.capture_color_preview()
         else:
             message = result.stderr.strip() or "Lancez d’abord un fond vidéo sur cet écran."
             self.color_status.set_text(message)
+        return False
+
+    def capture_color_preview(self, _button=None):
+        self.color_capture_generation += 1
+        generation = self.color_capture_generation
+        output = self.selected_color_output()
+        self.color_capture_button.set_sensitive(False)
+        self.color_capture_status.set_text("Capture de la frame MPV rendue…")
+
+        def worker():
+            result = bounded_process(
+                [str(CONTROLLER), "capture", "--output", output,
+                 "--settings", json.dumps(self.current_colors())],
+                timeout=8, capture_output=True, text=True,
+            )
+            GLib.idle_add(self.color_capture_finished, generation, result)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def color_capture_finished(self, generation, result):
+        if generation != self.color_capture_generation:
+            return False
+        self.color_capture_button.set_sensitive(True)
+        capture = Path(result.stdout.strip())
+        if result.returncode == 0 and capture.is_file():
+            try:
+                self.color_preview.set_paintable(Gdk.Texture.new_from_filename(str(capture)))
+                self.color_capture_status.set_text(
+                    "Aperçu du fond actif avec les réglages actuellement rendus."
+                )
+            except GLib.Error as error:
+                self.color_capture_status.set_text(f"Capture illisible : {error.message}")
+        else:
+            message = result.stderr.strip() or "Aucun fond MPVpaper actif sur cet écran."
+            self.color_capture_status.set_text(message)
         return False
 
     def apply_color_preset(self, _button, name):
@@ -1722,8 +1789,11 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         return page
 
     def view_changed(self, stack, _property):
-        if stack.get_visible_child_name() == "suggestions":
+        visible = stack.get_visible_child_name()
+        if visible == "suggestions":
             self.refresh_suggestions()
+        elif visible == "colors":
+            self.capture_color_preview()
 
     def refresh_suggestions(self):
         while child := self.suggestion_flow.get_first_child():
@@ -2333,6 +2403,7 @@ class MPVpaperApplication(Adw.Application):
             .suggestion-source { color: #6da2ff; font-weight: 600; }
             .suggestion-rating { color: #f3c969; }
             picture { border-radius: 4px; background: #090a0d; }
+            .color-preview-card { padding: 10px; border-radius: 8px; background: #171a21; border: 1px solid #30343e; }
         """)
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 

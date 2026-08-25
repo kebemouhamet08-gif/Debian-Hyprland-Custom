@@ -176,6 +176,49 @@ def apply_colors(config):
     ipc_request(output, ["set_property", "vf", color_filter(config)])
 
 
+def capture_path(output):
+    suffix = "all" if output == "*" else re.sub(r"[^A-Za-z0-9_.-]", "-", output)
+    directory = RUNTIME_DIR / "captures"
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    directory.chmod(0o700)
+    return directory / f"{suffix}.png"
+
+
+def capture_filter(config):
+    brightness = max(-100, min(100, int(config.get("brightness", 0)))) / 100
+    contrast = 1 + max(-100, min(100, int(config.get("contrast", 0)))) / 100
+    gamma = 2 ** (max(-100, min(100, int(config.get("gamma", 0)))) / 100)
+    saturation = 1 + max(-100, min(100, int(config.get("saturation", 0)))) / 100
+    hue = max(-100, min(100, int(config.get("hue", 0)))) * 1.8
+    return (
+        f"eq=brightness={brightness:.2f}:contrast={contrast:.2f}:gamma={gamma:.3f}:"
+        f"saturation={saturation:.2f},hue=h={hue:.1f},"
+        + color_filter(config).removeprefix("lavfi=[").removesuffix("]")
+    )
+
+
+def capture_wallpaper(output, config):
+    destination = capture_path(output)
+    source_result = ipc_request(output, ["get_property", "path"])
+    position_result = ipc_request(output, ["get_property", "time-pos"])
+    source = Path(str(source_result.get("data", ""))).expanduser()
+    if not source.is_file():
+        raise RuntimeError("le fichier du fond MPV actif est introuvable")
+    position = max(0, float(position_result.get("data") or 0))
+    temporary = destination.with_name(f".{destination.stem}.new.png")
+    result = subprocess.run([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-ss", f"{position:.3f}", "-i", str(source), "-frames:v", "1",
+        "-vf", capture_filter(config), str(temporary),
+    ], capture_output=True, text=True, timeout=10, check=False)
+    if result.returncode != 0 or not temporary.is_file() or not temporary.stat().st_size:
+        temporary.unlink(missing_ok=True)
+        raise RuntimeError(result.stderr.strip() or "extraction de la frame impossible")
+    temporary.replace(destination)
+    destination.chmod(0o600)
+    return destination
+
+
 def stop(output=None):
     if output is not None:
         run(["systemctl", "--user", "stop", unit_for_output(output)])
@@ -284,6 +327,7 @@ def main():
     parser = argparse.ArgumentParser(description="Contrôleur de MPVpaper Engine")
     parser.add_argument("action", choices=(
         "play", "random", "stop", "restore", "status", "apply-colors", "preview-colors",
+        "capture",
     ))
     parser.add_argument("--output", default=None, help="écran ciblé pour les couleurs")
     parser.add_argument("--settings", default=None, help="réglages couleur JSON à prévisualiser")
@@ -324,6 +368,25 @@ def main():
         try:
             apply_colors(profile)
         except (OSError, RuntimeError, json.JSONDecodeError) as error:
+            print(f"mpvpaper-engine: {error}", file=sys.stderr)
+            return 1
+    elif args.action == "capture":
+        output = args.output or config.get("output", "*")
+        if not valid_output_name(output):
+            print("mpvpaper-engine: nom d’écran invalide", file=sys.stderr)
+            return 2
+        try:
+            profile = {
+                **DEFAULT_CONFIG,
+                **config.get("assignments", {}).get(output, {}),
+                "output": output,
+            }
+            if args.settings:
+                preview = json.loads(args.settings)
+                profile.update({key: preview[key] for key in COLOR_DEFAULTS if key in preview})
+            print(capture_wallpaper(output, profile))
+        except (OSError, RuntimeError, ValueError, json.JSONDecodeError,
+                subprocess.TimeoutExpired) as error:
             print(f"mpvpaper-engine: {error}", file=sys.stderr)
             return 1
     else:

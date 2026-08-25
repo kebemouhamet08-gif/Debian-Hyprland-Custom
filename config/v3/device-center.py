@@ -16,6 +16,7 @@ from gi.repository import Adw, GLib, Gtk
 
 APP_ID = "io.github.kebemouhamet08.PeriphX"
 MANAGED_DEVICE_CLASSES = ("keyboard", "mouse", "gamepad")
+NO_DAEMON_CHECK = object()
 
 
 def is_external_peripheral(device):
@@ -60,8 +61,9 @@ def pericored_inventory():
     return None
 
 
-def daemon_device_groups():
-    devices = pericored_inventory()
+def daemon_device_groups(devices=None):
+    if devices is None:
+        devices = pericored_inventory()
     if devices is None:
         return None
     grouped = {}
@@ -163,8 +165,13 @@ def input_scope(label):
     return "origine inconnue"
 
 
-def device_groups():
-    daemon_groups = daemon_device_groups()
+def device_groups(daemon_devices=NO_DAEMON_CHECK):
+    if daemon_devices is NO_DAEMON_CHECK:
+        daemon_groups = daemon_device_groups()
+    elif daemon_devices is None:
+        daemon_groups = None
+    else:
+        daemon_groups = daemon_device_groups(daemon_devices)
     if daemon_groups is not None:
         return daemon_groups
     groups = []
@@ -396,7 +403,7 @@ class DeviceCenter(Adw.ApplicationWindow):
         self.set_content(toolbar)
         self.last_groups_signature = None
         self.refresh()
-        self.refresh_timer_id = GLib.timeout_add(500, self.refresh_devices)
+        self.refresh_timer_id = GLib.timeout_add_seconds(2, self.refresh_devices)
 
     def section(self, title, subtitle):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
@@ -617,9 +624,10 @@ class DeviceCenter(Adw.ApplicationWindow):
         self.device_detail_content.append(connection)
 
     def refresh(self):
-        groups = device_groups()
+        daemon_devices = pericored_inventory()
+        groups = device_groups(daemon_devices)
         total = sum(len(items) for _title, _subtitle, items, _kind in groups)
-        source = "pericored" if pericored_inventory() is not None else "détection locale"
+        source = "pericored" if daemon_devices is not None else "détection locale"
         self.overview_status.set_text(
             f"{total} élément(s) détecté(s) · source : {source} · actualisé maintenant"
         )

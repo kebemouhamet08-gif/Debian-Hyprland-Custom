@@ -947,6 +947,18 @@ def save_config(config):
     atomic_write_text(CONFIG_FILE, json.dumps(config, indent=2) + "\n")
 
 
+def bounded_process(command, timeout, **options):
+    try:
+        return subprocess.run(command, timeout=timeout, check=False, **options)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(
+            command, 124, stdout="",
+            stderr=f"Opération interrompue après {timeout} secondes.",
+        )
+    except OSError as error:
+        return subprocess.CompletedProcess(command, 127, stdout="", stderr=str(error))
+
+
 def monitor_names():
     try:
         result = subprocess.run(
@@ -1336,9 +1348,9 @@ class MPVpaperWindow(Adw.ApplicationWindow):
                     str(CONTROLLER), "preview-colors", "--output", output,
                     "--settings", json.dumps(preview),
                 ]
-            result = subprocess.run(
+            result = bounded_process(
                 command,
-                capture_output=True, text=True, check=False,
+                timeout=20, capture_output=True, text=True,
             )
             GLib.idle_add(self.colors_finished, result)
         threading.Thread(target=worker, daemon=True).start()
@@ -1580,9 +1592,9 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.theme_status.set_text(f"Application du thème V2 {theme_name}…")
 
         def worker():
-            result = subprocess.run(
+            result = bounded_process(
                 ["bash", str(V2_INSTALLER), "theme", "apply", theme_id],
-                capture_output=True, text=True, check=False,
+                timeout=900, capture_output=True, text=True,
             )
             GLib.idle_add(self.v2_theme_finished, result, theme_name, button)
 
@@ -1901,14 +1913,14 @@ class MPVpaperWindow(Adw.ApplicationWindow):
 
         def worker():
             download_uri = page_download_url(uri)
-            result = subprocess.run(
+            result = bounded_process(
                 [
                     str(LOCAL_YTDLP) if LOCAL_YTDLP.is_file() else "yt-dlp",
                     "--no-playlist", "--no-progress",
                     "--print", "after_move:filepath",
                     "-o", str(LIBRARY_DIR / f"{title[:160]}.%(ext)s"), download_uri,
                 ],
-                capture_output=True, text=True, check=False,
+                timeout=1800, capture_output=True, text=True,
             )
             GLib.idle_add(self.page_download_finished, result)
 
@@ -2006,8 +2018,11 @@ class MPVpaperWindow(Adw.ApplicationWindow):
     def generate_thumbnails(self, items):
         for video, thumb, key in items:
             if not thumb.exists():
-                subprocess.run(["ffmpegthumbnailer", "-i", str(video), "-o", str(thumb), "-s", "480", "-t", "20"],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+                bounded_process(
+                    ["ffmpegthumbnailer", "-i", str(video), "-o", str(thumb),
+                     "-s", "480", "-t", "20"],
+                    timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
             if key not in self.metadata:
                 self.metadata[key] = probe_video_duration(video)
         self.save_metadata()
@@ -2105,9 +2120,9 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.status.set_text(f"Téléchargement YouTube en {height}p…")
 
         def worker():
-            result = subprocess.run(
+            result = bounded_process(
                 youtube_download_command(uri, height),
-                capture_output=True, text=True, check=False,
+                timeout=1800, capture_output=True, text=True,
             )
             GLib.idle_add(self.youtube_download_finished, uri, result)
 
@@ -2166,7 +2181,9 @@ class MPVpaperWindow(Adw.ApplicationWindow):
 
     def run_controller(self, action, callback=None):
         def worker():
-            result = subprocess.run([str(CONTROLLER), action], capture_output=True, text=True, check=False)
+            result = bounded_process(
+                [str(CONTROLLER), action], timeout=30, capture_output=True, text=True,
+            )
             GLib.idle_add(callback or self.command_finished, action, result)
         threading.Thread(target=worker, daemon=True).start()
 
@@ -2200,10 +2217,10 @@ class MPVpaperWindow(Adw.ApplicationWindow):
 
         def worker():
             output = CACHE_DIR.parent / "login-background.jpeg"
-            extract = subprocess.run(
+            extract = bounded_process(
                 ["ffmpegthumbnailer", "-i", str(self.selected), "-o", str(output),
                  "-s", "1920", "-t", "20"],
-                capture_output=True, text=True, check=False,
+                timeout=120, capture_output=True, text=True,
             )
             if extract.returncode == 0:
                 result = subprocess.run(
@@ -2291,10 +2308,10 @@ class MPVpaperApplication(Adw.Application):
         return 0
 
     def do_shutdown(self):
-        subprocess.run(
+        bounded_process(
             ["systemctl", "--user", "start", "--no-block",
              "mpvpaper-engine-prefetch.service"],
-            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         Adw.Application.do_shutdown(self)
 

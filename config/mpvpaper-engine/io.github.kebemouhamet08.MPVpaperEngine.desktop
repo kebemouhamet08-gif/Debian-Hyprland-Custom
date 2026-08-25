@@ -9,3 +9,8 @@ Categories=Settings;DesktopSettings;
 Keywords=wallpaper;video;mpv;hyprland;
 StartupNotify=true
 StartupWMClass=io.github.kebemouhamet08.MPVpaperEngine
+Actions=Colors;
+
+[Desktop Action Colors]
+Name=Couleurs du fond vidéo
+Exec=mpvpaper-engine --colors

@@ -9,12 +9,25 @@ import subprocess
 import sys
 import re
 import secrets
+import socket
 
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "mpvpaper-engine"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 UNIT_PREFIX = "mpvpaper-engine-wallpaper"
 LEGACY_UNIT = f"{UNIT_PREFIX}.service"
+RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/tmp/mpvpaper-engine-{os.getuid()}")) / "mpvpaper-engine"
+COLOR_DEFAULTS = {
+    "brightness": 0,
+    "contrast": 0,
+    "gamma": 0,
+    "saturation": 0,
+    "hue": 0,
+    "temperature": 6500,
+    "red_balance": 0,
+    "green_balance": 0,
+    "blue_balance": 0,
+}
 DEFAULT_CONFIG = {
     "wallpaper": "",
     "output": "*",
@@ -24,6 +37,7 @@ DEFAULT_CONFIG = {
     "hardware_decode": True,
     "auto_pause": True,
     "autostart": True,
+    **COLOR_DEFAULTS,
 }
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"}
 WALLPAPER_DIRS = (
@@ -66,6 +80,46 @@ def unit_for_output(output):
     return f"{UNIT_PREFIX}-{suffix}.service"
 
 
+def socket_for_output(output):
+    suffix = "all" if output == "*" else re.sub(r"[^A-Za-z0-9_.-]", "-", output)
+    return RUNTIME_DIR / f"{suffix}.sock"
+
+
+def color_filter(config):
+    temperature = max(1000, min(40000, int(config.get("temperature", 6500))))
+    red = max(-100, min(100, int(config.get("red_balance", 0)))) / 100
+    green = max(-100, min(100, int(config.get("green_balance", 0)))) / 100
+    blue = max(-100, min(100, int(config.get("blue_balance", 0)))) / 100
+    return (
+        f"lavfi=[colortemperature=temperature={temperature},"
+        f"colorbalance=rm={red:.2f}:gm={green:.2f}:bm={blue:.2f}]"
+    )
+
+
+def ipc_request(output, command):
+    path = socket_for_output(output)
+    if not path.exists():
+        raise RuntimeError(f"aucun fond MPVpaper actif sur {output}")
+    payload = json.dumps({"command": command}).encode() + b"\n"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(2)
+        client.connect(str(path))
+        client.sendall(payload)
+        response = client.makefile("rb").readline()
+    result = json.loads(response)
+    if result.get("error") != "success":
+        raise RuntimeError(result.get("error", "erreur IPC mpv"))
+    return result
+
+
+def apply_colors(config):
+    output = config.get("output", "*")
+    for name in ("brightness", "contrast", "gamma", "saturation", "hue"):
+        value = max(-100, min(100, int(config.get(name, 0))))
+        ipc_request(output, ["set_property", name, value])
+    ipc_request(output, ["set_property", "vf", color_filter(config)])
+
+
 def stop(output=None):
     if output is not None:
         run(["systemctl", "--user", "stop", unit_for_output(output)])
@@ -76,7 +130,21 @@ def stop(output=None):
 
 
 def mpv_options(config):
-    options = ["load-scripts=no", f"speed={config['speed']}"]
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    ipc_socket = socket_for_output(config["output"])
+    try:
+        ipc_socket.unlink()
+    except FileNotFoundError:
+        pass
+    options = [
+        "load-scripts=no",
+        f"speed={config['speed']}",
+        f"input-ipc-server={ipc_socket}",
+        *(f"{name}={int(config.get(name, 0))}" for name in (
+            "brightness", "contrast", "gamma", "saturation", "hue"
+        )),
+        f"vf={color_filter(config)}",
+    ]
     if config["loop"]:
         options.append("loop-file=inf")
     if config["hardware_decode"]:
@@ -155,7 +223,11 @@ def play_random(config):
 
 def main():
     parser = argparse.ArgumentParser(description="Contrôleur de MPVpaper Engine")
-    parser.add_argument("action", choices=("play", "random", "stop", "restore", "status"))
+    parser.add_argument("action", choices=(
+        "play", "random", "stop", "restore", "status", "apply-colors", "preview-colors",
+    ))
+    parser.add_argument("--output", default=None, help="écran ciblé pour les couleurs")
+    parser.add_argument("--settings", default=None, help="réglages couleur JSON à prévisualiser")
     args = parser.parse_args()
     config = load_config()
 
@@ -176,6 +248,25 @@ def main():
                 profile = {**DEFAULT_CONFIG, **assignment, "output": output}
                 if profile["autostart"] and profile["wallpaper"]:
                     play(profile)
+    elif args.action in ("apply-colors", "preview-colors"):
+        output = args.output or config.get("output", "*")
+        profile = {
+            **DEFAULT_CONFIG,
+            **config.get("assignments", {}).get(output, {}),
+            "output": output,
+        }
+        if args.action == "preview-colors":
+            try:
+                preview = json.loads(args.settings or "{}")
+            except json.JSONDecodeError as error:
+                print(f"mpvpaper-engine: réglages JSON invalides : {error}", file=sys.stderr)
+                return 2
+            profile.update({key: preview[key] for key in COLOR_DEFAULTS if key in preview})
+        try:
+            apply_colors(profile)
+        except (OSError, RuntimeError, json.JSONDecodeError) as error:
+            print(f"mpvpaper-engine: {error}", file=sys.stderr)
+            return 1
     else:
         result = subprocess.run(
             ["systemctl", "--user", "list-units", f"{UNIT_PREFIX}-*.service",

@@ -149,6 +149,12 @@ note, tags, favori et ouverture directe de la fiche dans **Découvrir**.
 La note sur 5 est calibrée selon la pertinence et le volume d'interactions : les
 nouveaux éléments restent proches de 3,0, puis visites, téléchargements et favoris
 augmentent progressivement la confiance au lieu de produire une note arbitraire.
+L'onglet **Couleurs**, également accessible depuis **PeriphX → Affichage**, règle
+la luminosité, le contraste, le gamma, la saturation, la teinte, la température
+et la balance rouge/vert/bleu du fond vidéo. Chaque écran possède son profil et
+l'aperçu passe par le socket IPC de mpv sans redémarrer la vidéo. Les curseurs ne
+modifient pas la configuration tant que le bouton **Appliquer** n'est pas utilisé ;
+**Annuler** restaure immédiatement les valeurs enregistrées.
 Installez-la puis ouvrez-la depuis le menu des
 applications ou avec le bouton **Fond d'écran** situé en bas de l'écran :
 
@@ -170,26 +176,29 @@ chmod +x install-mpvpaper-engine.sh
    appliquez sa vidéo, puis sélectionnez `HDMI-A-1` et appliquez l'autre vidéo.
    N'utilisez **Tous les écrans** que pour afficher volontairement la même vidéo
    partout, car ce choix remplace les affectations individuelles.
-4. Le bouton **+** importe une ou plusieurs vidéos déjà présentes sur le disque.
+4. Dans **Couleurs**, sélectionnez l'écran, essayez un profil rapide ou déplacez
+   les curseurs. Cliquez sur **Appliquer** pour conserver le rendu, ou sur
+   **Annuler** pour revenir au profil précédent.
+5. Le bouton **+** importe une ou plusieurs vidéos déjà présentes sur le disque.
    Le bouton vidéo accepte une adresse YouTube : collez l'URL, choisissez
    `1080p`, `1440p` ou `2160p (4K)`, puis cliquez sur **Télécharger**. La vidéo
    téléchargée rejoint automatiquement la bibliothèque.
-5. Dans **Découvrir**, choisissez Steam Workshop, YouTube TeshiiSan, MotionBGS,
+6. Dans **Découvrir**, choisissez Steam Workshop, YouTube TeshiiSan, MotionBGS,
    MoeWalls ou VSThemes. Utilisez les flèches pour naviguer, le bouclier pour
    activer ou désactiver le bloqueur de publicités et le bouton de téléchargement
    pour importer la vidéo de la page affichée.
-6. Dans **Suggestions**, cliquez sur **Ouvrir** pour consulter une proposition
+7. Dans **Suggestions**, cliquez sur **Ouvrir** pour consulter une proposition
    dans Découvrir ou sur le cœur pour renforcer ce type de contenu. Le bouton
    d'actualisation recalcule le fil à partir des visites, téléchargements,
    favoris et fonds appliqués.
-7. Les cartes YouTube affichent leurs vues et leurs J'aime. Leur note combine
+8. Les cartes YouTube affichent leurs vues et leurs J'aime. Leur note combine
    60 % de portée des vues et 40 % de taux de J'aime ; les autres notes gagnent
    progressivement en confiance selon les interactions locales.
-8. **Utiliser pour l'écran de connexion** extrait une image fixe de la vidéo
+9. **Utiliser pour l'écran de connexion** extrait une image fixe de la vidéo
    sélectionnée. Saisissez le mot de passe administrateur dans le terminal qui
    s'ouvre pour l'installer dans SDDM. **Arrêter le fond vidéo** coupe les fonds
    animés en cours sans supprimer les fichiers de la bibliothèque.
-9. Dans **Thèmes**, choisissez le mode clair ou sombre, le thème GTK, les icônes
+10. Dans **Thèmes**, choisissez le mode clair ou sombre, le thème GTK, les icônes
    et le curseur parmi ceux installés sur la machine. Cliquez sur **Appliquer le
    thème** : le réglage est conservé dans la session et utilisé par les
    applications compatibles. MPVpaper Engine synchronise `gsettings` et les

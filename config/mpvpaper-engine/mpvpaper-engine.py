@@ -57,6 +57,23 @@ LOCAL_YTDLP = Path.home() / ".local" / "bin" / "yt-dlp"
 DEFAULT_CONFIG = {
     "wallpaper": "", "output": "*", "volume": 0, "speed": 1.0,
     "loop": True, "hardware_decode": True, "auto_pause": True, "autostart": True,
+    "brightness": 0, "contrast": 0, "gamma": 0, "saturation": 0, "hue": 0,
+    "temperature": 6500,
+    "red_balance": 0, "green_balance": 0, "blue_balance": 0,
+}
+COLOR_DEFAULTS = {
+    key: DEFAULT_CONFIG[key] for key in (
+        "brightness", "contrast", "gamma", "saturation", "hue",
+        "temperature", "red_balance", "green_balance", "blue_balance",
+    )
+}
+COLOR_PRESETS = {
+    "Original": COLOR_DEFAULTS,
+    "Bureau": {**COLOR_DEFAULTS, "contrast": 5, "saturation": 5},
+    "Nuit": {**COLOR_DEFAULTS, "brightness": -15, "gamma": -8,
+             "saturation": -8, "temperature": 4000},
+    "Photo": {**COLOR_DEFAULTS, "contrast": 8, "saturation": 12},
+    "Gaming": {**COLOR_DEFAULTS, "contrast": 15, "saturation": 20, "gamma": 5},
 }
 WALLPAPER_SOURCES = {
     "Steam Workshop": "https://steamcommunity.com/workshop/browse?appid=431960",
@@ -994,6 +1011,10 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.source_retry_delay = SOURCE_REFRESH_INTERVAL
         self.source_refresh_wanted = 1
         self.selected = Path(self.config["wallpaper"]) if self.config["wallpaper"] else None
+        self.color_controls = {}
+        self.color_labels = {}
+        self.color_loading = False
+        self.color_update_id = None
         self.cards = []
         LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -1102,11 +1123,205 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.views.add_titled(self.build_discover_view(), "discover", "Découvrir")
         self.views.add_titled(self.build_suggestions_view(), "suggestions", "Suggestions")
         self.views.add_titled(self.build_themes_view(), "themes", "Thèmes")
+        self.views.add_titled(self.build_colors_view(), "colors", "Couleurs")
         self.views.connect("notify::visible-child-name", self.view_changed)
         switcher = Gtk.StackSwitcher(stack=self.views)
         header.set_title_widget(switcher)
         toolbar.set_content(self.views)
         self.set_content(toolbar)
+
+    def build_colors_view(self):
+        page = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=18,
+            margin_top=20, margin_bottom=24, margin_start=24, margin_end=24,
+        )
+        page.append(Gtk.Label(
+            label="Couleurs du fond vidéo", xalign=0, css_classes=["title-1"],
+        ))
+        page.append(Gtk.Label(
+            label="Ajustements appliqués en direct par MPVpaper Engine à l’écran sélectionné.",
+            xalign=0, wrap=True, css_classes=["dim-label"],
+        ))
+
+        output_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        output_row.append(Gtk.Label(label="Écran", xalign=0, hexpand=True,
+                                    css_classes=["heading"]))
+        self.color_output_names = list(self.output_names)
+        output_labels = ["Tous les écrans (*)" if name == "*" else name
+                         for name in self.color_output_names]
+        self.color_output = Gtk.DropDown.new_from_strings(output_labels)
+        self.color_output.set_selected(self.output.get_selected())
+        self.color_output.connect("notify::selected", self.color_output_changed)
+        output_row.append(self.color_output)
+        page.append(output_row)
+
+        page.append(Gtk.Label(label="Profils rapides", xalign=0, css_classes=["title-2"]))
+        presets = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE,
+                              column_spacing=8, row_spacing=8,
+                              min_children_per_line=2, max_children_per_line=5)
+        for name in COLOR_PRESETS:
+            button = Gtk.Button(label=name)
+            button.connect("clicked", self.apply_color_preset, name)
+            presets.append(button)
+        page.append(presets)
+
+        page.append(Gtk.Label(label="Ajustements", xalign=0, css_classes=["title-2"]))
+        grid = Gtk.Grid(column_spacing=12, row_spacing=12,
+                        column_homogeneous=True)
+        controls = (
+            ("brightness", "Luminosité", -100, 100, 1, "%"),
+            ("contrast", "Contraste", -100, 100, 1, "%"),
+            ("gamma", "Gamma", -100, 100, 1, ""),
+            ("saturation", "Saturation", -100, 100, 1, "%"),
+            ("hue", "Teinte", -100, 100, 1, "°"),
+            ("temperature", "Température", 1000, 10000, 100, " K"),
+            ("red_balance", "Rouge", -100, 100, 1, "%"),
+            ("green_balance", "Vert", -100, 100, 1, "%"),
+            ("blue_balance", "Bleu", -100, 100, 1, "%"),
+        )
+        for index, spec in enumerate(controls):
+            grid.attach(self.color_control(*spec), index % 3, index // 3, 1, 1)
+        page.append(grid)
+
+        actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10,
+                          halign=Gtk.Align.END)
+        reset = Gtk.Button(label="Réinitialiser", icon_name="view-refresh-symbolic")
+        reset.connect("clicked", self.apply_color_preset, "Original")
+        actions.append(reset)
+        cancel = Gtk.Button(label="Annuler")
+        cancel.connect("clicked", self.cancel_color_preview)
+        actions.append(cancel)
+        apply_button = Gtk.Button(label="Appliquer", css_classes=["suggested-action"])
+        apply_button.connect("clicked", self.apply_colors_now)
+        actions.append(apply_button)
+        page.append(actions)
+        self.color_status = Gtk.Label(label="", xalign=0, wrap=True,
+                                      css_classes=["dim-label"])
+        page.append(self.color_status)
+        self.load_color_controls()
+
+        scroll = Gtk.ScrolledWindow(vexpand=True)
+        scroll.set_child(page)
+        return scroll
+
+    def color_control(self, key, title, minimum, maximum, step, suffix):
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6,
+                       margin_top=10, margin_bottom=10,
+                       margin_start=12, margin_end=12,
+                       css_classes=["card"])
+        heading = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        heading.append(Gtk.Label(label=title, xalign=0, hexpand=True,
+                                 css_classes=["heading"]))
+        value_label = Gtk.Label(label="", css_classes=["dim-label"])
+        self.color_labels[key] = (value_label, suffix)
+        heading.append(value_label)
+        card.append(heading)
+        scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL,
+                                         minimum, maximum, step)
+        scale.set_hexpand(True)
+        scale.set_draw_value(False)
+        scale.connect("value-changed", self.color_value_changed, key)
+        self.color_controls[key] = scale
+        card.append(scale)
+        return card
+
+    def selected_color_output(self):
+        return self.color_output_names[self.color_output.get_selected()]
+
+    def color_profile(self):
+        output = self.selected_color_output()
+        return {
+            **COLOR_DEFAULTS,
+            **self.config.get("assignments", {}).get(output, {}),
+        }
+
+    def load_color_controls(self):
+        if not self.color_controls:
+            return
+        self.color_loading = True
+        profile = self.color_profile()
+        for key, control in self.color_controls.items():
+            control.set_value(profile.get(key, COLOR_DEFAULTS[key]))
+            self.update_color_label(key)
+        self.color_loading = False
+
+    def update_color_label(self, key):
+        label, suffix = self.color_labels[key]
+        value = int(self.color_controls[key].get_value())
+        label.set_text(f"{value:+d}{suffix}" if value and key != "temperature"
+                       else f"{value}{suffix}")
+
+    def color_output_changed(self, _dropdown, _property):
+        self.load_color_controls()
+        self.color_status.set_text("")
+
+    def color_value_changed(self, _scale, key):
+        self.update_color_label(key)
+        if self.color_loading:
+            return
+        if self.color_update_id is not None:
+            GLib.source_remove(self.color_update_id)
+        self.color_update_id = GLib.timeout_add(120, self.preview_colors)
+
+    def current_colors(self):
+        return {key: int(control.get_value())
+                for key, control in self.color_controls.items()}
+
+    def preview_colors(self):
+        self.color_update_id = None
+        output = self.selected_color_output()
+        self.color_status.set_text("Aperçu en temps réel…")
+        self.run_color_controller(output, preview=self.current_colors())
+        return False
+
+    def run_color_controller(self, output, preview=None):
+        def worker():
+            command = [str(CONTROLLER), "apply-colors", "--output", output]
+            if preview is not None:
+                command = [
+                    str(CONTROLLER), "preview-colors", "--output", output,
+                    "--settings", json.dumps(preview),
+                ]
+            result = subprocess.run(
+                command,
+                capture_output=True, text=True, check=False,
+            )
+            GLib.idle_add(self.colors_finished, result)
+        threading.Thread(target=worker, daemon=True).start()
+
+    def colors_finished(self, result):
+        if result.returncode == 0:
+            self.color_status.set_text("Couleurs appliquées en direct au fond vidéo.")
+        else:
+            message = result.stderr.strip() or "Lancez d’abord un fond vidéo sur cet écran."
+            self.color_status.set_text(message)
+        return False
+
+    def apply_color_preset(self, _button, name):
+        self.color_loading = True
+        for key, value in COLOR_PRESETS[name].items():
+            self.color_controls[key].set_value(value)
+            self.update_color_label(key)
+        self.color_loading = False
+        self.preview_colors()
+
+    def apply_colors_now(self, _button):
+        output = self.selected_color_output()
+        assignments = self.config.setdefault("assignments", {})
+        profile = {**DEFAULT_CONFIG, **assignments.get(output, {})}
+        profile.update(self.current_colors())
+        assignments[output] = {key: value for key, value in profile.items()
+                               if key != "output"}
+        if self.config.get("output") == output:
+            self.config.update(self.current_colors())
+        save_config(self.config)
+        self.color_status.set_text("Enregistrement et application…")
+        self.run_color_controller(output)
+
+    def cancel_color_preview(self, _button):
+        self.load_color_controls()
+        self.color_status.set_text("Aperçu annulé; profil enregistré restauré.")
+        self.run_color_controller(self.selected_color_output())
 
     def build_discover_view(self):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
@@ -1878,15 +2093,23 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.load_library()
 
     def current_config(self):
+        output = self.output_names[self.output.get_selected()]
+        colors = {
+            **COLOR_DEFAULTS,
+            **self.config.get("assignments", {}).get(output, {}),
+        }
+        if self.selected_color_output() == output:
+            colors.update(self.current_colors())
         return {
             "wallpaper": str(self.selected) if self.selected else "",
-            "output": self.output_names[self.output.get_selected()],
+            "output": output,
             "volume": int(self.volume.get_value()),
             "speed": self.speeds[self.speed.get_selected()],
             "loop": self.loop[1].get_active(),
             "hardware_decode": self.hardware[1].get_active(),
             "auto_pause": self.auto_pause[1].get_active(),
             "autostart": self.autostart[1].get_active(),
+            **{key: colors[key] for key in COLOR_DEFAULTS},
         }
 
     def run_controller(self, action, callback=None):
@@ -1978,7 +2201,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
 
 class MPVpaperApplication(Adw.Application):
     def __init__(self):
-        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
 
     def do_startup(self):
         Adw.Application.do_startup(self)
@@ -2006,6 +2229,14 @@ class MPVpaperApplication(Adw.Application):
     def do_activate(self):
         window = self.props.active_window or MPVpaperWindow(self)
         window.present()
+
+    def do_command_line(self, command_line):
+        arguments = command_line.get_arguments()
+        self.activate()
+        window = self.props.active_window
+        if window and "--colors" in arguments:
+            window.views.set_visible_child_name("colors")
+        return 0
 
     def do_shutdown(self):
         subprocess.run(

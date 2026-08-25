@@ -42,3 +42,8 @@ demandent au daemon de recharger son registre. Un daemon plus ancien peut
 nécessiter un redémarrage manuel. Toute capability d'écriture est rejetée ; une
 future écriture HID devra être implémentée dans un pilote audité et compilé avec
 un matching plus strict et des validations propres au protocole matériel.
+
+Les mêmes opérations `install` et `update` sont disponibles dans l’onglet
+**Pilotes** de l’interface PeriphX : sélectionnez le manifest JSON local, puis
+vérifiez la version et l’état de rechargement affichés. La GUI appelle exactement
+le validateur de la CLI et ne contourne aucune règle de sécurité.

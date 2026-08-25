@@ -1,6 +1,8 @@
 import importlib.util
 import pathlib
+import subprocess
 import unittest
+from unittest import mock
 
 
 MODULE_PATH = pathlib.Path(__file__).parents[1] / "device-center.py"
@@ -10,6 +12,17 @@ SPEC.loader.exec_module(DEVICE_CENTER)
 
 
 class DeviceCenterTests(unittest.TestCase):
+    def test_driver_cli_uses_read_only_manifest_commands(self):
+        completed = subprocess.CompletedProcess(
+            ["periphx-cli"], 0,
+            stdout='[{"name":"mouse-driver","valid":true}]', stderr="",
+        )
+        with mock.patch.object(DEVICE_CENTER, "periphx_cli_command", return_value=["periphx-cli"]), \
+                mock.patch.object(DEVICE_CENTER.subprocess, "run", return_value=completed) as runner:
+            manifests = DEVICE_CENTER.driver_cli_json("list")
+        self.assertEqual(manifests[0]["name"], "mouse-driver")
+        self.assertEqual(runner.call_args.args[0], ["periphx-cli", "drivers", "list"])
+
     def test_internal_keyboard_is_not_managed(self):
         self.assertFalse(DEVICE_CENTER.is_external_peripheral({
             "class": "keyboard",

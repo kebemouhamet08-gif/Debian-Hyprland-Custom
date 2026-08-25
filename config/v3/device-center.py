@@ -113,6 +113,33 @@ def command_available(command):
     return shutil.which(command) is not None
 
 
+def periphx_cli_command():
+    installed = shutil.which("periphx-cli")
+    if installed:
+        return [installed]
+    local = Path(__file__).with_name("periphx.py")
+    if local.is_file():
+        return [sys.executable, str(local)]
+    fallback = Path.home() / ".local" / "lib" / "debian-next-v3" / "periphx.py"
+    return [sys.executable, str(fallback)] if fallback.is_file() else None
+
+
+def driver_cli_json(*arguments):
+    command = periphx_cli_command()
+    if not command:
+        raise RuntimeError("CLI PeriphX introuvable")
+    result = subprocess.run(
+        [*command, "drivers", *arguments], capture_output=True, text=True,
+        timeout=8, check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "opération pilote refusée")
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("réponse CLI PeriphX invalide") from error
+
+
 def bluetooth_sysfs_devices():
     devices = []
     root = Path("/sys/class/bluetooth")
@@ -402,6 +429,7 @@ class DeviceCenter(Adw.ApplicationWindow):
         self.stack.set_vexpand(True)
         self.stack.add_titled(self.build_overview(), "overview", "Vue d’ensemble")
         self.stack.add_titled(self.build_devices(), "devices", "Périphériques")
+        self.stack.add_titled(self.build_drivers(), "drivers", "Pilotes")
         self.stack.add_titled(self.build_display_link(), "display", "Affichage")
         self.stack.add_titled(self.build_capabilities(), "capabilities", "Capacités")
         switcher = Gtk.StackSwitcher(stack=self.stack)
@@ -477,6 +505,90 @@ class DeviceCenter(Adw.ApplicationWindow):
         scroll = Gtk.ScrolledWindow(vexpand=True)
         scroll.set_child(self.capability_content)
         return scroll
+
+    def build_drivers(self):
+        content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=14,
+            margin_top=24, margin_bottom=24, margin_start=28, margin_end=28,
+        )
+        content.append(self.section(
+            "Pilotes personnalisés",
+            "Installe ou met à jour des manifests stricts. Les capacités d’écriture "
+            "restent refusées tant qu’un protocole matériel n’est pas validé.",
+        ))
+        actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        install_button = Gtk.Button(label="Installer un manifest", css_classes=["suggested-action"])
+        install_button.connect("clicked", self.choose_driver_manifest, "install")
+        update_button = Gtk.Button(label="Mettre à jour un pilote")
+        update_button.connect("clicked", self.choose_driver_manifest, "update")
+        refresh_button = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Actualiser")
+        refresh_button.connect("clicked", lambda _button: self.refresh_driver_manifests())
+        actions.append(install_button)
+        actions.append(update_button)
+        actions.append(refresh_button)
+        content.append(actions)
+        self.driver_status = Gtk.Label(label="", xalign=0, wrap=True, css_classes=["dim-label"])
+        content.append(self.driver_status)
+        self.driver_rows = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=0, css_classes=["boxed-list"],
+        )
+        content.append(self.driver_rows)
+        scroll = Gtk.ScrolledWindow(vexpand=True)
+        scroll.set_child(content)
+        GLib.idle_add(self.refresh_driver_manifests)
+        return scroll
+
+    def choose_driver_manifest(self, _button, action):
+        chooser = Gtk.FileChooserNative(
+            title="Choisir un manifest de pilote PeriphX",
+            transient_for=self,
+            action=Gtk.FileChooserAction.OPEN,
+            accept_label="Sélectionner",
+            cancel_label="Annuler",
+        )
+        file_filter = Gtk.FileFilter(name="Manifest JSON")
+        file_filter.add_pattern("*.json")
+        chooser.add_filter(file_filter)
+        chooser.connect("response", self.driver_manifest_chosen, action)
+        chooser.show()
+
+    def driver_manifest_chosen(self, chooser, response, action):
+        if response != Gtk.ResponseType.ACCEPT:
+            return
+        selected = chooser.get_file()
+        manifest = selected.get_path() if selected else None
+        if not manifest:
+            self.driver_status.set_text("Le manifest doit être un fichier local.")
+            return
+        try:
+            result = driver_cli_json(action, manifest)
+            reloaded = "daemon rechargé" if result.get("daemon_reloaded") else "daemon hors ligne"
+            self.driver_status.set_text(f"Pilote {action} réussi · {reloaded} · lecture seule")
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            self.driver_status.set_text(f"Échec du pilote : {error}")
+        self.refresh_driver_manifests()
+
+    def refresh_driver_manifests(self):
+        if not hasattr(self, "driver_rows"):
+            return False
+        self.clear(self.driver_rows)
+        try:
+            manifests = driver_cli_json("list")
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            self.driver_status.set_text(str(error))
+            manifests = []
+        if not manifests:
+            self.driver_rows.append(self.detail_row(
+                "Aucun pilote custom", "Les pilotes génériques restent en lecture seule.",
+                "security-high-symbolic",
+            ))
+        for manifest in manifests:
+            name = manifest.get("name") or Path(manifest.get("path", "manifest")).name
+            state = f"Version {manifest.get('version')} · lecture seule" if manifest.get("valid") \
+                else f"Invalide · {manifest.get('error', 'erreur inconnue')}"
+            icon = "emblem-ok-symbolic" if manifest.get("valid") else "dialog-warning-symbolic"
+            self.driver_rows.append(self.detail_row(name, state, icon))
+        return False
 
     def build_display_link(self):
         content = Gtk.Box(

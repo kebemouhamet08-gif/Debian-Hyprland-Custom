@@ -110,13 +110,13 @@ list_themes() {
 }
 
 download_theme() {
-    local requested="${1:-}" id branch name mode url downloaded=0
+    local requested="${1:-}" id branch name _mode _url downloaded=0
     if [ -z "$requested" ]; then
         usage >&2
         return 2
     fi
     make_directory "$theme_root"
-    while IFS=$'\t' read -r id branch name mode url || [[ -n "$id" ]]; do
+    while IFS=$'\t' read -r id branch name _mode _url || [[ -n "$id" ]]; do
         [[ "$id" == \#* || -z "$id" ]] && continue
         if [ "$requested" != all ] && [ "$requested" != "$id" ]; then
             continue
@@ -225,9 +225,15 @@ apply_theme() {
             printf '\n# Debian Immersive v2 theme\n%s\n' "$theme_source_line" >>"$hypr_main"
         fi
         if command -v gsettings >/dev/null 2>&1; then
-            [ -n "$gtk_theme" ] && gsettings set org.gnome.desktop.interface gtk-theme "$gtk_theme" || true
-            [ -n "$icon_theme" ] && gsettings set org.gnome.desktop.interface icon-theme "$icon_theme" || true
-            [ -n "$color_scheme" ] && gsettings set org.gnome.desktop.interface color-scheme "$color_scheme" || true
+            if [ -n "$gtk_theme" ]; then
+                gsettings set org.gnome.desktop.interface gtk-theme "$gtk_theme" || true
+            fi
+            if [ -n "$icon_theme" ]; then
+                gsettings set org.gnome.desktop.interface icon-theme "$icon_theme" || true
+            fi
+            if [ -n "$color_scheme" ]; then
+                gsettings set org.gnome.desktop.interface color-scheme "$color_scheme" || true
+            fi
         fi
         {
             printf 'installed_at=%s\n' "$timestamp"
@@ -241,7 +247,8 @@ apply_theme() {
 }
 
 backup_target() {
-    local target="$1" backup_dir="$2" key="$3" manifest="$backup_dir/manifest.tsv"
+    local target="$1" backup_dir="$2" key="$3"
+    local manifest="$backup_dir/manifest.tsv"
     if [ -e "$target" ] || [ -L "$target" ]; then
         if ((dry_run)); then
             log_action "sauvegarder $target"

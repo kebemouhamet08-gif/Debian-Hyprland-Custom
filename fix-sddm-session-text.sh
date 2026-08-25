@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1112
 
 set -euo pipefail
 
@@ -28,13 +29,13 @@ fi
 if ! rg -q '^[[:space:]]*textRole:' "$theme_file"; then
     patch --dry-run --forward -p1 -d / < "$patch_file" >/dev/null
     printf 'Correction du texte des sessions…\n'
-    sudo patch --forward -p1 -d / < "$patch_file"
+    sudo patch --forward -p1 -d / --input="$patch_file"
 fi
 
 if ! rg -q 'source: "login-background.jpeg"' "$theme_file"; then
     patch --dry-run --forward -p1 -d / < "$background_patch" >/dev/null
     printf 'Correction du chemin du fond d’écran…\n'
-    sudo patch --forward -p1 -d / < "$background_patch"
+    sudo patch --forward -p1 -d / --input="$background_patch"
 fi
 
 printf 'Copie du fond d’écran dans le thème SDDM…\n'

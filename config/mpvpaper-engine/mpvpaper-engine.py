@@ -47,6 +47,8 @@ SOURCE_FRONTIER_FILE = CONFIG_DIR / "source-frontier.json"
 SOURCE_FRONTIER_LOCK = CONFIG_DIR / "source-frontier.lock"
 SOURCE_FRONTIER_VERSION = 2
 SOURCE_CRAWL_SLICE = 8
+MAX_SOURCE_PAGE_BYTES = 4 * 1024 * 1024
+MAX_PREVIEW_IMAGE_BYTES = 12 * 1024 * 1024
 LIBRARY_DIR = Path.home() / "Pictures" / "Wallpapers" / "Live"
 LEGACY_LIBRARY_DIR = Path.home() / "Pictures" / "wallpapers"
 CONTROLLER = Path.home() / ".local" / "lib" / "mpvpaper-engine" / "mpvpaper-enginectl.py"
@@ -143,6 +145,32 @@ def atomic_write_text(destination, contents, mode=0o600):
     finally:
         if temporary is not None and temporary.exists():
             temporary.unlink()
+
+
+def atomic_write_bytes(destination, contents, mode=0o600):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=destination.parent,
+            prefix=f".{destination.name}-", delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(contents)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.chmod(mode)
+        os.replace(temporary, destination)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+
+
+def read_limited(response, maximum):
+    contents = response.read(maximum + 1)
+    if len(contents) > maximum:
+        raise ValueError("réponse distante trop volumineuse")
+    return contents
 
 
 TAG_STOPWORDS = {
@@ -737,7 +765,7 @@ def fetch_source_candidates(source_uri):
             if source_uri_host(response.geturl()) != source_uri_host(source_uri):
                 return None
             parser = SourceSuggestionParser(source_uri)
-            parser.feed(response.read().decode("utf-8", "replace"))
+            parser.feed(read_limited(response, MAX_SOURCE_PAGE_BYTES).decode("utf-8", "replace"))
             parser.close()
     except (OSError, ValueError):
         return None
@@ -850,7 +878,7 @@ def page_download_url(uri):
         request = Request(uri, headers={"User-Agent": "Mozilla/5.0 MPVpaperEngine/1.0"})
         with urlopen(request, timeout=15) as response:
             parser = DownloadLinkParser()
-            parser.feed(response.read().decode("utf-8", "replace"))
+            parser.feed(read_limited(response, MAX_SOURCE_PAGE_BYTES).decode("utf-8", "replace"))
         if parser.links:
             ranked = sorted(
                 parser.links,
@@ -880,12 +908,17 @@ def fetch_suggestion_thumbnail(uri, destination):
         request = Request(uri, headers={"User-Agent": "Mozilla/5.0 MPVpaperEngine/1.0"})
         with urlopen(request, timeout=15) as response:
             parser = PreviewParser()
-            parser.feed(response.read().decode("utf-8", "replace"))
+            parser.feed(read_limited(response, MAX_SOURCE_PAGE_BYTES).decode("utf-8", "replace"))
         if not parser.preview:
             return False
         image_request = Request(urljoin(uri, parser.preview), headers={"User-Agent": "Mozilla/5.0"})
         with urlopen(image_request, timeout=15) as response:
-            destination.write_bytes(response.read())
+            content_type = response.headers.get_content_type()
+            if not content_type.startswith("image/"):
+                return False
+            atomic_write_bytes(
+                destination, read_limited(response, MAX_PREVIEW_IMAGE_BYTES)
+            )
         return True
     except (OSError, ValueError):
         return False

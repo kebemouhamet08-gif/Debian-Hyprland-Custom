@@ -139,8 +139,10 @@ pub fn parse_descriptor(bytes: &[u8]) -> HidDescriptor {
             }
             (1, 7) => state.report_size = value,
             (1, 8) => {
-                state.report_id = Some(value as u8);
-                report_ids.insert(value as u8);
+                if (1..=u8::MAX as u32).contains(&value) {
+                    state.report_id = Some(value as u8);
+                    report_ids.insert(value as u8);
+                }
             }
             (1, 9) => state.report_count = value,
             (1, 10) => stack.push(state),
@@ -273,6 +275,28 @@ mod tests {
             let descriptor = parse_descriptor(&bytes);
             assert_eq!(descriptor.size, bytes.len());
         }
+    }
+
+    #[test]
+    fn every_truncated_short_item_prefix_is_safe() {
+        for prefix in 0_u8..=u8::MAX {
+            let required = match prefix & 0x03 {
+                3 => 4,
+                value => value as usize,
+            };
+            for available in 0..required {
+                let mut bytes = vec![prefix];
+                bytes.resize(1 + available, 0xff);
+                assert_eq!(parse_descriptor(&bytes).size, bytes.len());
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_zero_report_id_does_not_create_artificial_id() {
+        let descriptor = parse_descriptor(&[0x85, 0x00, 0x75, 0x08, 0x95, 0x01, 0x81, 0x00]);
+        assert!(descriptor.report_ids.is_empty());
+        assert_eq!(descriptor.reports[0].id, None);
     }
 
     #[test]

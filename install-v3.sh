@@ -113,6 +113,8 @@ install_v3() {
     printf 'Socle Debian Next V3 initialisé : %s\n' "$state_dir"
     printf 'Lancement direct : %s\n' "$app_target"
     printf 'Commande PeriphX : %s\n' "$app_command"
+    # Afficher la commande littérale à copier.
+    # shellcheck disable=SC2016
     printf 'Si nécessaire : export PATH="$HOME/.local/bin:$PATH"\n'
 }
 
@@ -176,6 +178,8 @@ EOF
 }
 
 ensure_local_bin_path() {
+    # Conserver les variables pour les futurs shells.
+    # shellcheck disable=SC2016
     local path_line='export PATH="$HOME/.local/bin:$PATH"'
     if [ -f "$shell_config" ] && grep -Fqx "$path_line" "$shell_config"; then
         return
@@ -212,6 +216,8 @@ restore_v3() {
         systemctl --user disable --now pericored.service >/dev/null 2>&1 || true
     fi
     if [ -f "$path_marker" ] && [ -f "$shell_config" ]; then
+        # Le motif vise le texte littéral du PATH.
+        # shellcheck disable=SC2016
         sed -i '/^# PeriphX V3$/{N;/export PATH="\$HOME\/\.local\/bin:\$PATH"/d;}' "$shell_config"
     fi
     rm -f "$app_command" "$legacy_command" "$desktop_target" "$app_target" \

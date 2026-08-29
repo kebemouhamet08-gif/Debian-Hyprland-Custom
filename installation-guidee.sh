@@ -10,7 +10,8 @@ Usage : ./installation-guidee.sh [composant]
 
 Composants :
   deblestia-bar      barre Waybar verticale Deblestia Bar
-  deblestia-nova     barre Waybar en îlots Deblestia Nova
+  deblestia-nova     shell Quickshell complet Deblestia Nova
+  deblestia-nova-lite barre Waybar légère inspirée de Nova
   deblestia-shell    environnement Caelestia Deblestia Shell
   mpvpaper-engine    fonds d'écran vidéo MPVpaper Engine
   periphx            centre de contrôle matériel PeriphX
@@ -26,11 +27,12 @@ if [ -z "$component" ]; then
 Installation guidée — Deblestia
 
   1) Deblestia Bar
-  2) Deblestia Nova
+  2) Deblestia Nova (shell complet)
   3) Deblestia Shell
   4) MPVpaper Engine
   5) PeriphX
   6) MirrorBridge
+  7) Deblestia Nova Lite (Waybar)
   q) Quitter
 EOF
     read -r -p "Votre choix : " choice
@@ -41,6 +43,7 @@ EOF
         4) component=mpvpaper-engine ;;
         5) component=periphx ;;
         6) component=mirrorbridge ;;
+        7) component=deblestia-nova-lite ;;
         q|Q) exit 0 ;;
         *) printf 'Choix inconnu : %s\n' "$choice" >&2; exit 2 ;;
     esac
@@ -55,6 +58,11 @@ case "$component" in
     deblestia-nova)
         name="Deblestia Nova"
         installer="$repo_dir/install-deblestia-nova.sh"
+        check_command=("$installer" check)
+        ;;
+    deblestia-nova-lite)
+        name="Deblestia Nova Lite"
+        installer="$repo_dir/install-deblestia-nova-lite.sh"
         check_command=("$installer" check)
         ;;
     deblestia-shell|debian-immersive)

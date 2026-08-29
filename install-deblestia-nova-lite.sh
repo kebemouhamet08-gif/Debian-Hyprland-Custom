@@ -3,4 +3,5 @@
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec "$repo_dir/install-nova-shell.sh" "$@"
+action="${1:-install}"
+exec "$repo_dir/install.sh" "$action" nova

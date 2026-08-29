@@ -24,6 +24,7 @@
   ],
   "modules-center": ["group/media-player"],
   "modules-right": [
+    "group/focus",
     "group/system-monitor",
     "group/tools",
     "group/status",
@@ -51,6 +52,14 @@
       "custom/media-previous", "mpris", "custom/media-play-pause",
       "custom/media-next"
     ]
+  },
+  "group/focus": {
+    "orientation": "inherit",
+    "drawer": {
+      "transition-duration": 280,
+      "children-class": "nova-drawer"
+    },
+    "modules": ["custom/focus", "custom/notes"]
   },
   "group/system-monitor": {
     "orientation": "inherit",
@@ -131,6 +140,20 @@
     "on-click": "playerctl play-pause"
   },
   "custom/media-next": {"format": "󰒭", "tooltip-format": "Suivant", "on-click": "playerctl next"},
+
+  "custom/focus": {
+    "exec": "$HOME/.config/waybar/deblestia-focus.py",
+    "return-type": "json",
+    "interval": 1,
+    "on-click": "$HOME/.config/waybar/deblestia-focus.py toggle",
+    "on-click-middle": "$HOME/.config/waybar/deblestia-focus.py skip",
+    "on-click-right": "$HOME/.config/waybar/deblestia-focus.py reset"
+  },
+  "custom/notes": {
+    "format": "󰎞",
+    "tooltip-format": "Notes et tâches locales",
+    "on-click": "$HOME/.config/waybar/deblestia-notes.sh"
+  },
 
   "custom/overview": {
     "format": "󰍛",
@@ -255,6 +278,82 @@
     "tooltip-format": "<big>{:%B %Y}</big>\n<tt><small>{calendar}</small></tt>"
   },
   "custom/power": {
+    "format": "",
+    "tooltip-format": "Session et alimentation",
+    "on-click": "$HOME/.config/hypr/scripts/Wlogout.sh"
+  }
+},
+{
+  "name": "nova-rail",
+  "layer": "top",
+  "position": "left",
+  "width": 48,
+  "exclusive": false,
+  "ipc": true,
+  "margin-top": 66,
+  "margin-bottom": 66,
+  "margin-left": 8,
+  "spacing": 8,
+  "modules-left": ["group/rail-identity"],
+  "modules-center": ["group/rail-actions"],
+  "modules-right": ["group/rail-session"],
+
+  "group/rail-identity": {
+    "orientation": "inherit",
+    "modules": ["custom/rail-launcher"]
+  },
+  "group/rail-actions": {
+    "orientation": "inherit",
+    "modules": [
+      "custom/rail-dashboard", "custom/rail-focus", "custom/rail-notes",
+      "custom/rail-theme", "custom/rail-wallpaper"
+    ]
+  },
+  "group/rail-session": {
+    "orientation": "inherit",
+    "modules": ["custom/rail-lock", "custom/rail-power"]
+  },
+
+  "custom/rail-launcher": {
+    "format": "",
+    "tooltip-format": "Lanceur Deblestia",
+    "on-click": "pkill rofi || rofi -show drun -theme $HOME/.config/rofi/DebianGlass.rasi"
+  },
+  "custom/rail-dashboard": {
+    "format": "󰕮",
+    "tooltip-format": "Tableau de bord Caelestia",
+    "on-click": "hyprctl dispatch global caelestia:dashboard"
+  },
+  "custom/rail-focus": {
+    "exec": "DEBLESTIA_FOCUS_COMPACT=1 $HOME/.config/waybar/deblestia-focus.py",
+    "return-type": "json",
+    "interval": 1,
+    "on-click": "$HOME/.config/waybar/deblestia-focus.py toggle",
+    "on-click-middle": "$HOME/.config/waybar/deblestia-focus.py skip",
+    "on-click-right": "$HOME/.config/waybar/deblestia-focus.py reset"
+  },
+  "custom/rail-notes": {
+    "format": "󰎞",
+    "tooltip-format": "Notes et tâches",
+    "on-click": "$HOME/.config/waybar/deblestia-notes.sh"
+  },
+  "custom/rail-theme": {
+    "format": "󰏘",
+    "tooltip-format": "Palette dynamique",
+    "on-click": "$HOME/.config/waybar/deblestia-theme.sh"
+  },
+  "custom/rail-wallpaper": {
+    "format": "󰸉",
+    "tooltip-format": "Fonds vidéo",
+    "on-click": "$HOME/.local/bin/mpvpaper-engine-toggle",
+    "on-click-right": "$HOME/.local/bin/mpvpaper-enginectl random"
+  },
+  "custom/rail-lock": {
+    "format": "󰌾",
+    "tooltip-format": "Verrouillage Caelestia",
+    "on-click": "$HOME/.config/hypr/scripts/caelestia-v2-lock.sh"
+  },
+  "custom/rail-power": {
     "format": "",
     "tooltip-format": "Session et alimentation",
     "on-click": "$HOME/.config/hypr/scripts/Wlogout.sh"

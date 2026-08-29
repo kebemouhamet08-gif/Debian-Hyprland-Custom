@@ -29,9 +29,9 @@ check_dependencies() {
     if [ "$variant" = nova ]; then
         for command_name in brightnessctl cliphist grim hyprpicker powerprofilesctl slurp swaync-client wl-copy; do
             if command -v "$command_name" >/dev/null 2>&1; then
-                printf 'OK       %s (Nova)\n' "$command_name"
+                printf 'OK       %s (Nova Lite)\n' "$command_name"
             else
-                printf 'OPTIONNEL %s (fonction Nova associée indisponible)\n' "$command_name"
+                printf 'OPTIONNEL %s (fonction Nova Lite associée indisponible)\n' "$command_name"
             fi
         done
     fi
@@ -49,7 +49,7 @@ case "$variant" in
     nova)
         config_name='[Deblestia] Nova'
         style_name='[Deblestia] Nova.css'
-        product_name='Deblestia Nova'
+        product_name='Deblestia Nova Lite'
         ;;
     *)
         printf 'Variante inconnue : %s (bar ou nova attendu)\n' "$variant" >&2
@@ -98,6 +98,8 @@ chmod +x \
     "$waybar_dir/deblestia-bar-stats.sh" \
     "$waybar_dir/deblestia-updates.sh" \
     "$waybar_dir/deblestia-theme.sh" \
+    "$waybar_dir/deblestia-focus.py" \
+    "$waybar_dir/deblestia-notes.sh" \
     "$waybar_dir/deblestia-waybar-switch.sh" \
     "$waybar_dir/power-profile-menu.sh" \
     "$waybar_dir/workspace-label.sh" \

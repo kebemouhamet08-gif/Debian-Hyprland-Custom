@@ -1,7 +1,7 @@
 # Deblestia — Debian × Caelestia
 
 Ce dépôt regroupe plusieurs composants indépendants. Ils sont présentés par leur
-nom dans ce guide : **Deblestia Bar**, **Deblestia Nova**, **Deblestia Shell**,
+nom dans ce guide : **Deblestia Bar**, **Deblestia Nova**, **Deblestia Nova Lite**, **Deblestia Shell**,
 **MPVpaper Engine**, **PeriphX** et **MirrorBridge**. Les commandes historiques restent disponibles
 comme alias techniques afin de préserver les installations existantes.
 
@@ -42,8 +42,19 @@ git sparse-checkout set config/waybar config/hypr
 ```bash
 git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git deblestia-nova
 cd deblestia-nova
+git sparse-checkout set config/nova-shell config/hypr
+./install-deblestia-nova.sh check
+./install-deblestia-nova.sh install
+./install-deblestia-nova.sh launch
+```
+
+### Deblestia Nova Lite
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git deblestia-nova-lite
+cd deblestia-nova-lite
 git sparse-checkout set config/waybar config/hypr
-./install-deblestia-nova.sh
+./install-deblestia-nova-lite.sh
 ```
 
 ### Deblestia Shell
@@ -431,17 +442,75 @@ Son pilote HID générique décode chaque interface et son descripteur, calcule 
 empreinte SHA-256 et reste strictement en lecture seule tant qu'aucun pilote validé
 n'est associé au VID/PID concerné.
 
-## Deblestia Nova — Waybar en îlots
+## Deblestia Nova — shell Quickshell complet
 
-Deblestia Nova est une seconde configuration Waybar inspirée de l'organisation
+Deblestia Nova est désormais l'expérience complète inspirée de
+[end4-pC](https://github.com/pctrade/end4-pC) : barre Material Expressive,
+panneaux latéraux, lanceur/recherche, aperçu des bureaux, notifications, réglages,
+dock, widgets de bureau, OSD, sélecteur de fond d'écran et menu de session. Le code
+amont GPLv3 est téléchargé au moment de l'installation puis adapté avec un preset
+Debian et une correction de compatibilité Qt 6.8, sans lancer l'installateur
+Arch/Nix du projet d'origine.
+
+Le profil Debian remplace les commandes `pacman` et KDE par `apt`, `nmtui`,
+`blueman-manager`, `btop` et `pavucontrol`. Il conserve les démons de notifications
+et trays existants tant que l'utilisateur ne choisit pas de les arrêter. Le
+verrouillage `Super+L` utilise Hyprlock installé par Debian afin d'éviter les
+incompatibilités PAM déjà rencontrées.
+
+### Installation copier-coller sur Debian
+
+Quickshell (`qs`) doit déjà être fonctionnel. Les paquets ci-dessous couvrent les
+fonctions principales ; certains outils peuvent ne pas exister dans toutes les
+versions de Debian et restent optionnels :
+
+```bash
+sudo apt update
+sudo apt install git python3 jq curl fish cava brightnessctl ddcutil \
+  network-manager network-manager-gnome blueman wl-clipboard imagemagick \
+  swappy slurp wf-recorder tesseract-ocr playerctl upower qalc \
+  pavucontrol kitty btop libnotify-bin
+
+git clone --depth 1 https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git
+cd Debian-Hyprland-Custom
+./install-deblestia-nova.sh check
+./install-deblestia-nova.sh install
+./install-deblestia-nova.sh launch
+```
+
+Les commandes de maintenance sont :
+
+```bash
+./install-deblestia-nova.sh status
+./install-deblestia-nova.sh update
+./install-deblestia-nova.sh restore
+```
+
+`install` et `update` créent une sauvegarde dans
+`~/.config/deblestia-nova-backups/`. `restore` remet la dernière sauvegarde et
+conserve à son tour l'état remplacé. Les réglages de Nova restent dans
+`~/.config/illogical-impulse/config.json`.
+
+Raccourcis principaux : `Super+Espace` recherche, `Super+Échap` réglages,
+`Super+N` panneau droit, `Super+Maj+N` panneau gauche, `Super+Maj+W` fonds
+d'écran, `Super+Maj+B` barre et `Ctrl+Alt+Suppr` session.
+
+## Deblestia Nova Lite — Waybar en îlots
+
+Deblestia Nova Lite est une configuration Waybar inspirée de l'organisation
 visuelle de Caelestia : plusieurs capsules translucides flottent en haut de
 l'écran et regroupent les fonctions par contexte. Elle ne remplace pas la barre
 verticale Deblestia Bar.
 
-Nova est le profil Waybar sélectionné par défaut par `install.sh`. Deblestia Bar
+Son rendu expressif combine désormais une barre supérieure segmentée et colorée,
+un rail d'actions flottant à gauche et le bouton de fond d'écran inférieur. Cette
+composition adapte les principes Material et les panneaux modulaires observés
+dans end4-pC au format Waybar, tout en conservant les outils Debian de Deblestia.
+
+Nova Lite est le profil Waybar sélectionné par défaut par `install.sh`. Deblestia Bar
 reste disponible avec `install-deblestia-bar.sh` ou avec le sélecteur de profil.
 
-Fonctions supplémentaires de Nova :
+Fonctions supplémentaires de Nova Lite :
 
 - fenêtre active, lanceurs rapides et bureaux avec icônes d'applications ;
 - lecteur MPRIS complet et panneau multimédia GTK ;
@@ -452,6 +521,8 @@ Fonctions supplémentaires de Nova :
 - historique du presse-papiers, capture de zone et pipette couleur ;
 - palettes Rose, Tokyo, Nord, Gruvbox, Mono et couleurs du fond d'écran ;
 - notifications, veille, mises à jour APT, tray et panneau d'alimentation ;
+- centre Focus inspiré de l'approche modulaire d'end4-pC : Pomodoro persistant,
+  pauses courtes/longues et notes locales ;
 - accès permanent à MPVpaper Engine dans le coin inférieur droit.
 
 Les commandes enrichies utilisent, lorsqu'elles sont installées, `brightnessctl`,
@@ -467,12 +538,12 @@ session. La commande équivalente accepte `rose`, `tokyo`, `nord`, `gruvbox`,
 ```
 
 ```bash
-./install-deblestia-nova.sh check
-./install-deblestia-nova.sh
+./install-deblestia-nova-lite.sh check
+./install-deblestia-nova-lite.sh
 ```
 
 Après installation, un clic droit sur le logo Debian permet de basculer entre
-Nova et Bar. La même action est disponible en ligne de commande :
+Nova Lite et Bar. La même action est disponible en ligne de commande :
 
 ```bash
 ~/.config/waybar/deblestia-waybar-switch.sh nova
@@ -529,6 +600,8 @@ fichiers. Déconnectez-vous puis reconnectez-vous si Waybar ne se recharge pas.
 - Projet et dotfiles originaux : [@JaKooLit](https://github.com/JaKooLit)
 - Personnalisation Debian : [@kebemouhamet08-gif](https://github.com/kebemouhamet08-gif)
 - Galerie et principes de collection : [ydots](https://github.com/hugthebox/ydots)
+- Architecture Quickshell, panneaux configurables et services locaux étudiés dans
+  [end4-pC](https://github.com/pctrade/end4-pC), dérivé d'illogical-impulse.
 - Thèmes instantanés et architecture modulaire étudiés dans
   [Lyne Dots](https://github.com/caioax/lyne-dots) et
   [Minflair](https://github.com/t4lentles5/minflair).

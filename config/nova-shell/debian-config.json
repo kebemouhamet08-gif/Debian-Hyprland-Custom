@@ -1,0 +1,77 @@
+{
+  "panelFamily": "ii",
+  "policies": {
+    "ai": 0,
+    "weeb": 0
+  },
+  "appearance": {
+    "fonts": {
+      "main": "DejaVu Sans",
+      "numbers": "DejaVu Sans",
+      "title": "DejaVu Sans",
+      "iconNerd": "JetBrainsMono Nerd Font",
+      "monospace": "JetBrainsMono Nerd Font",
+      "reading": "DejaVu Sans",
+      "expressive": "DejaVu Sans"
+    },
+    "transparency": {
+      "enable": true,
+      "automatic": true,
+      "backgroundTransparency": 0.11,
+      "contentTransparency": 0.57
+    },
+    "wallpaperTheming": {
+      "enableAppsAndShell": true,
+      "enableQtApps": false,
+      "enableTerminal": false
+    }
+  },
+  "apps": {
+    "bluetooth": "blueman-manager",
+    "changePassword": "kitty -e bash -lc 'passwd; printf \\\"\\nAppuyez sur Entree pour fermer…\\\"; read -r'",
+    "network": "kitty -e nmtui",
+    "manageUser": "kitty -e bash -lc 'sudo adduser --help; printf \\\"\\nUtilisez adduser/usermod selon le besoin.\\nAppuyez sur Entree pour fermer…\\\"; read -r'",
+    "networkEthernet": "kitty -e nmtui",
+    "taskManager": "kitty -e btop",
+    "terminal": "kitty",
+    "update": "kitty -e bash -lc 'sudo apt update && sudo apt upgrade; printf \\\"\\nAppuyez sur Entree pour fermer…\\\"; read -r'",
+    "volumeMixer": "pavucontrol"
+  },
+  "bar": {
+    "cornerStyle": 3,
+    "vertical": false,
+    "showBackground": true,
+    "showFrame": false,
+    "topLeftIcon": "distro",
+    "verbose": true,
+    "resources": {
+      "style": "filled",
+      "showValue": false,
+      "alwaysShowCpu": true,
+      "alwaysShowRam": true
+    }
+  },
+  "dock": {
+    "enable": true,
+    "showBackground": true,
+    "showPinButton": true,
+    "showAppsButton": true,
+    "showMedia": true,
+    "pinnedOnStartup": false,
+    "hoverToReveal": true
+  },
+  "background": {
+    "showGrid": true,
+    "showBlur": false,
+    "widgetsLocked": false,
+    "widgets": {
+      "clock": {
+        "enable": true
+      }
+    }
+  },
+  "conflictKiller": {
+    "autoKillNotificationDaemons": false,
+    "autoKillTrays": false
+  }
+}

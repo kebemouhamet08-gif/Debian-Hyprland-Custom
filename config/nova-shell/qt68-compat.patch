@@ -1,0 +1,152 @@
+diff --git a/modules/common/utils/ScreenshotAction.qml b/modules/common/utils/ScreenshotAction.qml
+index 1d2c149..9b5fe2b 100644
+--- a/modules/common/utils/ScreenshotAction.qml
++++ b/modules/common/utils/ScreenshotAction.qml
+@@ -8,6 +8,5 @@ import qs.services
+ import QtQuick
+ import QtQuick.Controls
+-import Qt.labs.synchronizer
+ import Quickshell
+ 
+ Singleton {
+diff --git a/modules/ii/overview/Overview.qml b/modules/ii/overview/Overview.qml
+index 81711dc..9d9a99e 100644
+--- a/modules/ii/overview/Overview.qml
++++ b/modules/ii/overview/Overview.qml
+@@ -2,7 +2,6 @@ import qs
+ import qs.services
+ import qs.modules.common
+ import qs.modules.common.widgets
+-import Qt.labs.synchronizer
+ import QtQuick
+ import QtQuick.Controls
+ import QtQuick.Layouts
+@@ -92,9 +91,8 @@ Scope {
+             SearchWidget {
+                 id: searchWidget
+                 anchors.horizontalCenter: parent.horizontalCenter
+-                Synchronizer on searchingText {
+-                    property alias source: panelWindow.searchingText
+-                }
++                searchingText: panelWindow.searchingText
++                onSearchingTextChanged: panelWindow.searchingText = searchingText
+             }
+ 
+             Loader {
+diff --git a/modules/ii/overview/SearchWidget.qml b/modules/ii/overview/SearchWidget.qml
+index 7512405..2cb189c 100644
+--- a/modules/ii/overview/SearchWidget.qml
++++ b/modules/ii/overview/SearchWidget.qml
+@@ -1,6 +1,5 @@
+ pragma ComponentBehavior: Bound
+ 
+-import Qt.labs.synchronizer
+ import Qt5Compat.GraphicalEffects
+ import QtQuick
+ import QtQuick.Layouts
+@@ -145,9 +144,8 @@ Item { // Wrapper
+                 Layout.rightMargin: 4
+                 Layout.topMargin: verticalPadding
+                 Layout.bottomMargin: verticalPadding
+-                Synchronizer on searchingText {
+-                    property alias source: root.searchingText
+-                }
++                searchingText: root.searchingText
++                onSearchingTextChanged: root.searchingText = searchingText
+             }
+ 
+             Rectangle {
+diff --git a/modules/ii/regionSelector/RegionSelection.qml b/modules/ii/regionSelector/RegionSelection.qml
+index 6e674c8..7935438 100644
+--- a/modules/ii/regionSelector/RegionSelection.qml
++++ b/modules/ii/regionSelector/RegionSelection.qml
+@@ -6,7 +6,6 @@ import qs.modules.common.widgets
+ import qs.services
+ import QtQuick
+ import QtQuick.Controls
+-import Qt.labs.synchronizer
+ import Quickshell
+ import Quickshell.Io
+ import Quickshell.Wayland
+@@ -529,11 +528,9 @@ PanelWindow {
+ 
+             OptionsToolbar {
+-                Synchronizer on action {
+-                    property alias source: root.action
+-                }
+-                Synchronizer on selectionMode {
+-                    property alias source: root.selectionMode
+-                }
++                action: root.action
++                selectionMode: root.selectionMode
++                onActionChanged: root.action = action
++                onSelectionModeChanged: root.selectionMode = selectionMode
+                 onDismiss: root.dismiss();
+             }
+             ToolbarPairedFab {
+diff --git a/modules/ii/sidebarLeft/SidebarLeftContent.qml b/modules/ii/sidebarLeft/SidebarLeftContent.qml
+index 316d57a..9950f78 100644
+--- a/modules/ii/sidebarLeft/SidebarLeftContent.qml
++++ b/modules/ii/sidebarLeft/SidebarLeftContent.qml
+@@ -6,6 +6,5 @@ import QtQuick.Controls
+ import QtQuick.Layouts
+ import Qt5Compat.GraphicalEffects
+-import Qt.labs.synchronizer
+ 
+ Item {
+     id: root
+diff --git a/modules/common/widgets/StyledRectangularShadow.qml b/modules/common/widgets/StyledRectangularShadow.qml
+index 87485aa..820db9e 100644
+--- a/modules/common/widgets/StyledRectangularShadow.qml
++++ b/modules/common/widgets/StyledRectangularShadow.qml
+@@ -1,14 +1,17 @@
+ import QtQuick
+-import QtQuick.Effects
++import Qt5Compat.GraphicalEffects
+ import qs.modules.common
+ 
+-RectangularShadow {
++DropShadow {
+     required property var target
+     anchors.fill: target
+-    radius: target.radius
+-    blur: 0.9 * Appearance.sizes.elevationMargin
+-    offset: Qt.vector2d(0.0, 1.0)
++    source: target
++    radius: Math.round(0.9 * Appearance.sizes.elevationMargin)
++    samples: Math.max(9, radius * 2 + 1)
++    horizontalOffset: 0
++    verticalOffset: 1
+     spread: 1
+     color: Appearance.colors.colShadow
+     cached: true
++    transparentBorder: true
+ }
+diff --git a/modules/ii/overlay/OverlayWidgetDelegateChooser.qml b/modules/ii/overlay/OverlayWidgetDelegateChooser.qml
+index 6435ae1..e34060a 100644
+--- a/modules/ii/overlay/OverlayWidgetDelegateChooser.qml
++++ b/modules/ii/overlay/OverlayWidgetDelegateChooser.qml
+@@ -5,3 +5,4 @@ import qs.modules.common.widgets
+ import QtQuick
+ import QtQuick.Layouts
++import Qt.labs.qmlmodels
+ import Quickshell
+diff --git a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml
+index e077701..a288896 100644
+--- a/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml
++++ b/modules/ii/sidebarRight/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml
+@@ -5,3 +5,4 @@ import qs.modules.common.widgets
+ import QtQuick
+ import QtQuick.Layouts
++import Qt.labs.qmlmodels
+ import Quickshell
+diff --git a/modules/ii/sidebarLeft/aiChat/AiMessage.qml b/modules/ii/sidebarLeft/aiChat/AiMessage.qml
+index 5719541..4331333 100644
+--- a/modules/ii/sidebarLeft/aiChat/AiMessage.qml
++++ b/modules/ii/sidebarLeft/aiChat/AiMessage.qml
+@@ -5,4 +5,5 @@ import qs.modules.common.functions
+ import QtQuick
+ import QtQuick.Controls
+ import QtQuick.Layouts
++import Qt.labs.qmlmodels
+ import Quickshell

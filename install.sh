@@ -47,8 +47,8 @@ case "$variant" in
         product_name='Deblestia Bar'
         ;;
     nova)
-        config_name='[Deblestia] Nova'
-        style_name='[Deblestia] Nova.css'
+        config_name='[Deblestia] Nova Lite'
+        style_name='[Deblestia] Nova Lite.css'
         product_name='Deblestia Nova Lite'
         ;;
     *)
@@ -78,8 +78,8 @@ for path in \
     "$waybar_dir/styles/[CUSTOM] Debian Glass.css" \
     "$waybar_dir/configs/[Deblestia] Bar" \
     "$waybar_dir/styles/[Deblestia] Bar.css" \
-    "$waybar_dir/configs/[Deblestia] Nova" \
-    "$waybar_dir/styles/[Deblestia] Nova.css"; do
+    "$waybar_dir/configs/[Deblestia] Nova Lite" \
+    "$waybar_dir/styles/[Deblestia] Nova Lite.css"; do
     if [ -e "$path" ] || [ -L "$path" ]; then
         cp -a "$path" "$backup_dir/waybar/"
     fi
@@ -87,6 +87,11 @@ done
 
 cp -a "$repo_dir/config/waybar/." "$waybar_dir/"
 cp -a "$repo_dir/config/hypr/scripts/." "$hypr_scripts_dir/"
+ln -sfn ../panel-colors.css "$waybar_dir/styles/panel-colors.css"
+if [ "$variant" = nova ]; then
+    rm -f "$waybar_dir/configs/[Deblestia] Bar" \
+        "$waybar_dir/styles/[Deblestia] Bar.css"
+fi
 for color_file in panel-colors.css theme-overrides.css; do
     if [ -f "$backup_dir/waybar/$color_file" ]; then
         cp -a "$backup_dir/waybar/$color_file" "$waybar_dir/$color_file"
@@ -108,6 +113,10 @@ chmod +x \
 ln -sfn "$waybar_dir/configs/$config_name" "$waybar_dir/config"
 ln -sfn "$waybar_dir/styles/$style_name" "$waybar_dir/style.css"
 
-pkill -SIGUSR2 -x waybar 2>/dev/null || true
+if [ -x "$hypr_scripts_dir/desktop-shell-mode.sh" ]; then
+    "$hypr_scripts_dir/desktop-shell-mode.sh" "$config_name"
+else
+    pkill -SIGUSR2 -x waybar 2>/dev/null || true
+fi
 
 printf '%s installé. Sauvegarde : %s\n' "$product_name" "$backup_dir"

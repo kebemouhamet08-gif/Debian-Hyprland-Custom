@@ -458,6 +458,14 @@ et trays existants tant que l'utilisateur ne choisit pas de les arrêter. Le
 verrouillage `Super+L` utilise Hyprlock installé par Debian afin d'éviter les
 incompatibilités PAM déjà rencontrées.
 
+L'installation désactive l'ancien `caelestia-v2.conf` et ajoute le profil
+`[Deblestia] Nova` au sélecteur des barres. Ce profil active exclusivement le
+shell Quickshell complet : barre supérieure avec lecteur, horloge analogique sur
+le bureau et dock/menu d'applications permanent en bas. Choisir une autre Waybar
+arrête ensemble ces trois éléments Nova avant de lancer la barre sélectionnée ;
+`no panel` arrête les deux systèmes. La restauration remet la configuration
+Hyprland sauvegardée.
+
 ### Installation copier-coller sur Debian
 
 Quickshell (`qs`) doit déjà être fonctionnel. Les paquets ci-dessous couvrent les
@@ -497,15 +505,17 @@ d'écran, `Super+Maj+B` barre et `Ctrl+Alt+Suppr` session.
 
 ## Deblestia Nova Lite — Waybar en îlots
 
-Deblestia Nova Lite est une configuration Waybar inspirée de l'organisation
-visuelle de Caelestia : plusieurs capsules translucides flottent en haut de
-l'écran et regroupent les fonctions par contexte. Elle ne remplace pas la barre
-verticale Deblestia Bar.
+Deblestia Nova Lite est une barre Waybar horizontale qui reprend l'organisation
+de la barre Nova/Quickshell. Elle utilise une palette sombre et neutre, sans ombre
+colorée, rail latéral ni barre inférieure. Le profil apparaît sous le nom
+`[Deblestia] Nova Lite`. Comme toute autre Waybar, sa sélection arrête complètement
+le shell Nova afin d'éviter les doubles barres et les réservations invisibles.
 
-Son rendu expressif combine désormais une barre supérieure segmentée et colorée,
-un rail d'actions flottant à gauche et le bouton de fond d'écran inférieur. Cette
-composition adapte les principes Material et les panneaux modulaires observés
-dans end4-pC au format Waybar, tout en conservant les outils Debian de Deblestia.
+Le profil `[CUSTOM] Debian Glass` utilise lui aussi une disposition supérieure
+complète et conserve ses fonctions historiques : lecteur, applications, bureaux,
+restauration des fenêtres réduites, météo, état système et contrôles de session.
+Son lecteur central adopte une capsule inspirée de Spotify avec visualisation
+audio CAVA, métadonnées MPRIS et commandes précédent, lecture/pause et suivant.
 
 Nova Lite est le profil Waybar sélectionné par défaut par `install.sh`. Deblestia Bar
 reste disponible avec `install-deblestia-bar.sh` ou avec le sélecteur de profil.
@@ -523,7 +533,7 @@ Fonctions supplémentaires de Nova Lite :
 - notifications, veille, mises à jour APT, tray et panneau d'alimentation ;
 - centre Focus inspiré de l'approche modulaire d'end4-pC : Pomodoro persistant,
   pauses courtes/longues et notes locales ;
-- accès permanent à MPVpaper Engine dans le coin inférieur droit.
+- accès à MPVpaper Engine depuis le tiroir d'outils.
 
 Les commandes enrichies utilisent, lorsqu'elles sont installées, `brightnessctl`,
 `cliphist`, `grim`, `hyprpicker`, `powerprofilesctl`, `slurp`, `swaync-client` et

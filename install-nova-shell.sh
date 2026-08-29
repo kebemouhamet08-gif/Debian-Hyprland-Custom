@@ -5,6 +5,8 @@ set -euo pipefail
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 action="${1:-install}"
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+waybar_dir="$config_home/waybar"
+selector_target="$waybar_dir/configs/[Deblestia] Nova"
 target="$config_home/quickshell/deblestia-nova"
 settings_dir="$config_home/illogical-impulse"
 settings_file="$settings_dir/config.json"
@@ -12,6 +14,7 @@ hypr_dir="$config_home/hypr"
 hypr_main="$hypr_dir/hyprland.conf"
 hypr_include="$hypr_dir/deblestia-nova-shell.conf"
 launch_target="$hypr_dir/scripts/deblestia-nova-shell-launch.sh"
+mode_target="$hypr_dir/scripts/desktop-shell-mode.sh"
 lock_target="$hypr_dir/scripts/deblestia-nova-lock.sh"
 backup_root="$config_home/deblestia-nova-backups"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/deblestia-nova"
@@ -92,6 +95,18 @@ merge_settings() {
     mv "$output" "$settings_file"
 }
 
+disable_conflicting_shell_source() {
+    local output
+
+    [ -f "$hypr_main" ] || return 0
+    output="$(mktemp "$hypr_dir/.deblestia-hyprland.XXXXXX")"
+    sed -E \
+        's|^[[:space:]]*source[[:space:]]*=[[:space:]]*(.*/caelestia-v2\.conf)[[:space:]]*$|# Désactivé par Deblestia Nova : source = \1|' \
+        "$hypr_main" >"$output"
+    chmod --reference="$hypr_main" "$output"
+    mv "$output" "$hypr_main"
+}
+
 install_shell() {
     local timestamp backup_dir staging revision
     check_dependencies || {
@@ -110,12 +125,15 @@ install_shell() {
     git -C "$staging/source" apply --whitespace=nowarn \
         "$repo_dir/config/nova-shell/qt68-compat.patch"
 
-    mkdir -p "$backup_dir/files" "$state_dir" "$hypr_dir/scripts" "$(dirname "$target")"
+    mkdir -p "$backup_dir/files" "$state_dir" "$hypr_dir/scripts" \
+        "$(dirname "$target")" "$waybar_dir/configs"
     : >"$backup_dir/manifest.tsv"
     record_file "$target" quickshell "$backup_dir"
     record_file "$settings_file" settings.json "$backup_dir"
     record_file "$hypr_include" hypr-include.conf "$backup_dir"
     record_file "$launch_target" launch.sh "$backup_dir"
+    record_file "$mode_target" desktop-shell-mode.sh "$backup_dir"
+    record_file "$selector_target" nova-selector-entry "$backup_dir"
     record_file "$lock_target" lock.sh "$backup_dir"
     record_file "$hypr_main" hyprland.conf "$backup_dir"
 
@@ -126,8 +144,11 @@ install_shell() {
 
     install -m 0644 "$repo_dir/config/hypr/deblestia-nova-shell.conf" "$hypr_include"
     install -m 0755 "$repo_dir/config/hypr/scripts/deblestia-nova-shell-launch.sh" "$launch_target"
+    install -m 0755 "$repo_dir/config/hypr/scripts/desktop-shell-mode.sh" "$mode_target"
+    install -m 0644 "$repo_dir/config/waybar/configs/[Deblestia] Nova" "$selector_target"
     install -m 0755 "$repo_dir/config/hypr/scripts/deblestia-nova-lock.sh" "$lock_target"
     merge_settings
+    disable_conflicting_shell_source
 
     if [ ! -f "$hypr_main" ]; then
         printf '%s\n' "$source_line" >"$hypr_main"
@@ -151,7 +172,14 @@ launch_shell() {
         printf "Deblestia Nova n'est pas installé. Lancez d'abord install.\n" >&2
         return 1
     fi
-    "$launch_target"
+    if [ -d "$waybar_dir/configs" ]; then
+        ln -sfn "$selector_target" "$waybar_dir/config"
+    fi
+    if [ -x "$mode_target" ]; then
+        "$mode_target" "[Deblestia] Nova"
+    else
+        "$launch_target" --force
+    fi
     printf 'Deblestia Nova démarre en arrière-plan.\n'
 }
 

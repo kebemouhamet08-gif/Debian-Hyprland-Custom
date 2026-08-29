@@ -44,6 +44,33 @@
     "showFrame": false,
     "topLeftIcon": "distro",
     "verbose": true,
+    "layouts": {
+      "leftLayout": [
+        "launcherButton",
+        "workspaces",
+        "activeWindow",
+        "docktoPanel"
+      ],
+      "middleLayout": [
+        "visualizer",
+        "media",
+        "visualizer"
+      ],
+      "rightLayout": [
+        "resources",
+        "sysTray",
+        "utilButtons",
+        "systemIcons",
+        "clockWidget",
+        "powerButton"
+      ]
+    },
+    "media": {
+      "alwaysVisible": true,
+      "onlyTitle": false,
+      "maxWidth": 280,
+      "minWidth": 100
+    },
     "resources": {
       "style": "filled",
       "showValue": false,
@@ -57,8 +84,8 @@
     "showPinButton": true,
     "showAppsButton": true,
     "showMedia": true,
-    "pinnedOnStartup": false,
-    "hoverToReveal": true
+    "pinnedOnStartup": true,
+    "hoverToReveal": false
   },
   "background": {
     "showGrid": true,
@@ -66,7 +93,8 @@
     "widgetsLocked": false,
     "widgets": {
       "clock": {
-        "enable": true
+        "enable": true,
+        "style": "cookie"
       }
     }
   },

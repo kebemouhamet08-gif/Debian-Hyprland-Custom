@@ -37,13 +37,14 @@ modes=(0644 0644 0755 0755 0755)
 
 usage() {
     cat <<'EOF'
-Usage : ./install-v2.sh [check|install|status|restore|theme] [--dry-run] [sauvegarde]
+Usage : ./install-deblestia-shell.sh [check|install|status|restore|pam-fix|theme] [--dry-run] [sauvegarde]
 
   check              vérifie les prérequis et les fichiers source
-  install            installe ou actualise uniquement la v2 (commande par défaut)
-  status             compare la v2 installée avec le dépôt
+  install            installe ou actualise Deblestia Shell (commande par défaut)
+  status             compare Deblestia Shell avec le dépôt
   restore [chemin]   restaure une sauvegarde, ou la dernière sauvegarde connue
-    theme list         affiche les thèmes HyDE suivis par la v2
+  pam-fix            corrige l'authentification de l'écran verrouillé Caelestia sous Debian
+    theme list         affiche les thèmes HyDE suivis par Deblestia Shell
     theme download ID  télécharge un thème, ou tous les thèmes avec ID=all
     theme apply ID     adapte et active un thème déjà téléchargé
   --dry-run           affiche les écritures prévues sans modifier le système
@@ -89,18 +90,49 @@ check_prerequisites() {
         fi
     done
     if [ -f "$component_manifest" ]; then
-        printf 'OK       manifeste des composants v2\n'
+        printf 'OK       manifeste des composants Deblestia Shell\n'
     else
         printf 'MANQUANT manifeste : %s\n' "$component_manifest" >&2
         failed=1
     fi
     if [ -f "$theme_manifest" ]; then
-        printf 'OK       catalogue des thèmes v2\n'
+        printf 'OK       catalogue des thèmes Deblestia Shell\n'
     else
         printf 'MANQUANT catalogue : %s\n' "$theme_manifest" >&2
         failed=1
     fi
+    if [ -r "/run/faillock/$(id -un)" ] && [ -w "/run/faillock/$(id -un)" ]; then
+        printf 'OK       PAM Caelestia (compteur faillock)\n'
+    else
+        printf 'ATTENTION PAM Caelestia incomplet : exécutez ./install-deblestia-shell.sh pam-fix\n'
+    fi
     return "$failed"
+}
+
+install_pam_fix() {
+    local account group temporary target
+    account="$(id -un)"
+    group="$(id -gn)"
+    target="/etc/tmpfiles.d/deblestia-caelestia-faillock.conf"
+    temporary="$(mktemp)"
+    trap 'rm -f "$temporary"' RETURN
+
+    {
+        printf '# Compatibilité PAM de Caelestia Shell sous Debian.\n'
+        printf 'd /run/faillock 0755 root root -\n'
+        printf 'f /run/faillock/%s 0600 %s %s -\n' "$account" "$account" "$group"
+    } >"$temporary"
+
+    printf 'Installation de la compatibilité PAM Caelestia pour %s…\n' "$account"
+    sudo install -o root -g root -m 0644 "$temporary" "$target"
+    sudo systemd-tmpfiles --create "$target"
+
+    if [ -r "/run/faillock/$account" ] && [ -w "/run/faillock/$account" ]; then
+        printf 'Correction PAM installée. Le verrouillage Caelestia accepte maintenant le mot de passe Debian.\n'
+    else
+        printf 'ÉCHEC : le compteur /run/faillock/%s reste inaccessible.\n' "$account" >&2
+        return 1
+    fi
 }
 
 list_themes() {
@@ -208,7 +240,7 @@ apply_theme() {
     else
         make_directory "$hypr_dir"
         {
-            printf '# Debian Immersive v2 — thème adapté depuis HyDE\n'
+            printf '# Deblestia Shell — thème adapté depuis HyDE\n'
             printf '# Source : %s\n\n' "$id"
             printf 'general {\n'
             printf '    col.active_border = %s\n' "$active_border"
@@ -222,7 +254,7 @@ apply_theme() {
         if [ ! -f "$hypr_main" ]; then
             printf '%s\n' "$theme_source_line" >"$hypr_main"
         elif ! grep -Fqx "$theme_source_line" "$hypr_main"; then
-            printf '\n# Debian Immersive v2 theme\n%s\n' "$theme_source_line" >>"$hypr_main"
+            printf '\n# Thème Deblestia Shell\n%s\n' "$theme_source_line" >>"$hypr_main"
         fi
         if command -v gsettings >/dev/null 2>&1; then
             if [ -n "$gtk_theme" ]; then
@@ -286,15 +318,15 @@ install_v2() {
 
     if [ ! -f "$hypr_main" ]; then
         if ((dry_run)); then
-            log_action "créer $hypr_main avec l'inclusion v2"
+            log_action "créer $hypr_main avec l'inclusion Deblestia Shell"
         else
             printf '%s\n' "$source_line" >"$hypr_main"
         fi
     elif ! grep -Fqx "$source_line" "$hypr_main"; then
         if ((dry_run)); then
-            log_action "ajouter l'inclusion v2 à $hypr_main"
+            log_action "ajouter l'inclusion Deblestia Shell à $hypr_main"
         else
-            printf '\n# Debian Immersive v2\n%s\n' "$source_line" >>"$hypr_main"
+            printf '\n# Deblestia Shell\n%s\n' "$source_line" >>"$hypr_main"
         fi
     fi
 
@@ -309,7 +341,7 @@ install_v2() {
     } >"$state_file"
     printf '%s\tinstall\t%s\n' "$timestamp" "$backup_dir" >>"$history_file"
     hyprctl reload >/dev/null 2>&1 || true
-    printf 'Debian Immersive v2 installé. Sauvegarde : %s\n' "$backup_dir"
+    printf 'Deblestia Shell installé. Sauvegarde : %s\n' "$backup_dir"
     printf 'Relancez la session, ou exécutez : %s\n' "$hypr_dir/scripts/caelestia-v2-launch.sh"
 }
 
@@ -327,9 +359,9 @@ status_v2() {
         fi
     done
     if [ -f "$hypr_main" ] && grep -Fqx "$source_line" "$hypr_main"; then
-        printf 'OK       inclusion Hyprland v2\n'
+        printf 'OK       inclusion Hyprland Deblestia Shell\n'
     else
-        printf 'ABSENT   inclusion Hyprland v2\n'
+        printf 'ABSENT   inclusion Hyprland Deblestia Shell\n'
         differences=1
     fi
     if [ -f "$state_file" ]; then
@@ -349,7 +381,7 @@ restore_v2() {
         backup_dir="$(last_backup_from_state || true)"
     fi
     if [ -z "$backup_dir" ] || [ ! -f "$backup_dir/manifest.tsv" ]; then
-        printf 'Sauvegarde v2 introuvable. Indiquez son chemin après restore.\n' >&2
+        printf 'Sauvegarde Deblestia Shell introuvable. Indiquez son chemin après restore.\n' >&2
         return 1
     fi
     while IFS=$'\t' read -r status target relative; do
@@ -357,7 +389,7 @@ restore_v2() {
             if [ "$status" = present ]; then
                 log_action "restaurer $target depuis $backup_dir/$relative"
             else
-                log_action "retirer le fichier v2 $target"
+                log_action "retirer le fichier Deblestia Shell $target"
             fi
             continue
         fi
@@ -395,6 +427,7 @@ case "$action" in
     install) install_v2 ;;
     status) status_v2 ;;
     restore) restore_v2 "${1:-}" ;;
+    pam-fix) install_pam_fix ;;
     theme)
         if [ "${1:-}" = list ]; then
             list_themes

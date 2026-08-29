@@ -472,7 +472,7 @@ def capability_rows():
          "joydev / evdev"),
         ("Bluetooth", "bluetoothctl" if command_available("bluetoothctl") else "non installé",
          "BlueZ"),
-        ("Profils", "V3 local", "JSON isolé"),
+        ("Profils", "PeriphX local", "JSON isolé"),
     ]
 
 
@@ -652,7 +652,7 @@ class DeviceCenter(Adw.ApplicationWindow):
                                           margin_start=28, margin_end=28)
         self.capability_content.append(self.section(
             "Capacités disponibles",
-            "La V3 utilise les interfaces Debian standard et n’envoie aucune commande "
+            "PeriphX utilise les interfaces Debian standard et n’envoie aucune commande "
             "USB sans backend identifié.",
         ))
         self.capability_rows_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,

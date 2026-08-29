@@ -2,7 +2,7 @@
 
 set -u
 
-stats_class="debian-glass-stats"
+stats_class="deblestia-bar-stats"
 
 if hyprctl clients -j 2>/dev/null | jq -e --arg class "$stats_class" '.[] | select(.class == $class)' >/dev/null; then
     hyprctl dispatch closewindow "class:^(${stats_class})$"

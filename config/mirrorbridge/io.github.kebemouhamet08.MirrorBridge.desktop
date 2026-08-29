@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=MirrorBridge
+Name[fr]=Miroir du téléphone
+Comment=Mirror Android and iPhone screens on Linux
+Comment[fr]=Recopier l’écran d’un téléphone Android ou iPhone sous Linux
+Exec=mirrorbridge
+Icon=video-display
+Terminal=false
+Categories=AudioVideo;
+Keywords=Android;iPhone;AirPlay;screen;mirror;scrcpy;phone;
+Keywords[fr]=Android;iPhone;AirPlay;écran;miroir;téléphone;
+StartupNotify=true

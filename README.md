@@ -1,84 +1,151 @@
-# Debian Hyprland Custom
+# Deblestia — Debian × Caelestia
 
-## v2 — Debian Immersive avec Caelestia
+Ce dépôt regroupe plusieurs composants indépendants. Ils sont présentés par leur
+nom dans ce guide : **Deblestia Bar**, **Deblestia Nova**, **Deblestia Shell**,
+**MPVpaper Engine**, **PeriphX** et **MirrorBridge**. Les commandes historiques restent disponibles
+comme alias techniques afin de préserver les installations existantes.
 
-Dans son propre profil, la v2 utilise [Caelestia Shell](https://github.com/caelestia-dots/shell)
+## Installation guidée
+
+Cette méthode télécharge le dépôt, affiche les composants par leur vrai nom,
+vérifie les prérequis lorsque l'installateur le permet, puis demande confirmation
+avant l'installation. Copiez-collez le bloc complet :
+
+```bash
+git clone --depth 1 https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git
+cd Debian-Hyprland-Custom
+./installation-guidee.sh
+```
+
+Le menu peut aussi être contourné en indiquant directement le composant, par
+exemple `./installation-guidee.sh periphx`. L'installation reste locale au compte
+utilisateur, sauf lorsqu'une dépendance système doit être installée séparément.
+
+## Télécharger et installer un seul composant
+
+Chaque bloc ci-dessous crée son propre dossier et utilise le clonage partiel de
+Git. Il télécharge le script racine et uniquement la partie de `config/` nécessaire.
+Exécutez un bloc à la fois depuis le dossier dans lequel vous souhaitez conserver
+les sources.
+
+### Deblestia Bar
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git deblestia-bar
+cd deblestia-bar
+git sparse-checkout set config/waybar config/hypr
+./install-deblestia-bar.sh
+```
+
+### Deblestia Nova
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git deblestia-nova
+cd deblestia-nova
+git sparse-checkout set config/waybar config/hypr
+./install-deblestia-nova.sh
+```
+
+### Deblestia Shell
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git deblestia-shell
+cd deblestia-shell
+git sparse-checkout set config/caelestia config/hypr config/v2
+./install-deblestia-shell.sh check
+./install-deblestia-shell.sh install
+```
+
+### MPVpaper Engine
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git mpvpaper-engine
+cd mpvpaper-engine
+git sparse-checkout set config/mpvpaper-engine
+./install-mpvpaper-engine.sh check
+./install-mpvpaper-engine.sh install
+```
+
+### PeriphX
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git periphx
+cd periphx
+git sparse-checkout set config/v3
+./install-periphx.sh check
+./install-periphx.sh install
+./install-periphx.sh launch
+```
+
+### MirrorBridge
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git mirrorbridge
+cd mirrorbridge
+git sparse-checkout set config/mirrorbridge
+./install-mirrorbridge.sh check
+./install-mirrorbridge.sh install
+./install-mirrorbridge.sh launch
+```
+
+## MirrorBridge — miroir Android et iPhone
+
+MirrorBridge fournit une interface GTK4 pour détecter les téléphones Android avec
+ADB, lancer leur recopie et leur contrôle avec scrcpy, ou démarrer un récepteur
+AirPlay pour iPhone avec UxPlay. La version 0.1 ouvre encore le flux dans la
+fenêtre du moteur externe.
+
+Sous Debian 13 « Trixie », installez d'abord les dépendances de compilation,
+ADB, UxPlay et Avahi :
+
+```bash
+sudo apt update
+sudo apt install cargo pkg-config libgtk-4-dev adb uxplay avahi-daemon
+```
+
+Le paquet `scrcpy` fourni par APT est signalé comme obsolète par son projet.
+Installez plutôt la construction statique de la
+[dernière version officielle](https://github.com/Genymobile/scrcpy/releases/latest),
+ou suivez la procédure officielle de
+[compilation sous Linux](https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md).
+UxPlay peut être installé avec APT sous Debian ; son développement actif se
+trouve dans le dépôt [FDH2/UxPlay](https://github.com/FDH2/UxPlay).
+
+```bash
+./install-mirrorbridge.sh check
+./install-mirrorbridge.sh install
+./install-mirrorbridge.sh launch
+```
+
+Sur Android, activez le débogage USB et acceptez l’autorisation affichée par le
+téléphone. Sur iPhone, ouvrez **Centre de contrôle → Recopie de l’écran**, puis
+sélectionnez **MirrorBridge**. Les commandes `adb`, `scrcpy`, `uxplay` et le
+service `avahi-daemon` fournissent les backends système nécessaires.
+
+## Deblestia Shell — environnement Caelestia
+
+Dans son propre profil, Deblestia Shell utilise [Caelestia Shell](https://github.com/caelestia-dots/shell)
 à la place de Waybar,
 une interface Quickshell fluide avec lanceur, tableau de bord, visualiseur audio,
-fond dynamique et panneaux translucides. Elle est indépendante de la v1
-« Debian Glass » : aucune version ne remplace l'autre et l'utilisateur installe
+fond dynamique et panneaux translucides. Elle est indépendante de
+Deblestia Bar : aucun composant ne remplace l'autre et l'utilisateur installe
 uniquement les expériences qu'il souhaite conserver.
 
-La v2 adopte aussi progressivement certains concepts de
+Deblestia Shell adopte aussi progressivement certains concepts de
 [HyDE](https://github.com/HyDE-Project/HyDE) : installation modulaire, thèmes
 interchangeables, couleurs dynamiques, sélecteurs et profils. Leur adaptation à
-Debian v2 est découpée en étapes vérifiables dans la
-[feuille de route v2](docs/V2-ROADMAP.md) ; l'installateur Arch de HyDE n'est pas
+Debian est découpée en étapes vérifiables dans la
+[feuille de route Deblestia Shell](docs/V2-ROADMAP.md) ; l'installateur Arch de HyDE n'est pas
 utilisé directement.
 
-Le catalogue des thèmes officiels HyDE suivis par la v2 se trouve dans
+Le catalogue des thèmes officiels HyDE suivis par Deblestia Shell se trouve dans
 `config/v2/themes.tsv`. Il référence les branches de
 [hyde-themes](https://github.com/HyDE-Project/hyde-themes), sans importer leur
-installateur Arch. Chaque thème devra être adapté au format Debian v2 avant son
-activation : Hyprland, GTK, Caelestia/Waybar, icônes, polices et fonds doivent
-rester isolés dans le profil v2 et être restaurables.
+installateur Arch. Chaque thème devra être adapté au format Deblestia Shell avant son
+activation : Hyprland, GTK, Caelestia/Waybar, icônes, polices et fonds restent
+isolés dans le profil Deblestia Shell et sont restaurables.
 
-Les futures versions suivront la même règle : chaque `vN` apporte une nouvelle
-expérience ou de nouvelles options personnelles avec son propre installateur, ses
-réglages et sa procédure de restauration, sans dépendre d'une version antérieure.
-
-## v3 — Debian Next
-
-La V3 est maintenant préparée comme une expérience indépendante. Son manifeste se
-trouve dans `config/v3/components.tsv` et sa feuille de route dans
-`docs/V3-ROADMAP.md`. Elle ne modifie pas la V1 ou la V2 tant que son installateur
-et ses tests de restauration ne sont pas prêts.
-
-Le premier outil V3 est le centre de contrôle matériel. Installez-le avec :
-
-```bash
-./install-v3.sh check
-./install-v3.sh install
-./install-v3.sh launch
-```
-
-La commande courte `debian-next-v3-devices` fonctionne aussi après avoir ajouté
-`~/.local/bin` au `PATH` :
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-periphx
-```
-
-La CLI expose l'inventaire et l'inspection détaillée sans écrire vers le matériel :
-
-```bash
-periphx-cli list
-periphx-cli inspect DEVICE_ID
-periphx-cli interfaces DEVICE_ID
-periphx-cli capture DEVICE_ID --duration-ms 1000
-```
-
-La capture n'ouvre que les nœuds `hidraw` rattachés au périphérique sélectionné,
-avec `O_RDONLY`, une durée maximale de 30 secondes et au plus 1 000 reports. Si
-les permissions Linux refusent la lecture, PeriphX renvoie une erreur explicite
-et ne modifie jamais les permissions du périphérique automatiquement.
-
-Des manifests de pilotes custom peuvent être validés, installés et mis à jour en
-lecture seule. Le format et ses garanties de sécurité sont décrits dans
-[`docs/PERIPHX-CUSTOM-DRIVERS.md`](docs/PERIPHX-CUSTOM-DRIVERS.md).
-
-Il affiche les périphériques USB/HID, Bluetooth, claviers, souris, écrans et manettes détectés
-par Debian. Les capacités DDC/CI, OpenRGB, evdev/uinput et les profils sont
-indiqués séparément ; un périphérique propriétaire ne sera pas piloté sans backend
-compatible ni permission explicite.
-
-`pericored` agrège les nœuds `event`, `mouse` et `hidraw` par périphérique physique.
-Son pilote HID générique décode chaque interface et son descripteur, calcule une
-empreinte SHA-256 et reste strictement en lecture seule tant qu'aucun pilote validé
-n'est associé au VID/PID concerné.
-
-### Prérequis v2
+### Prérequis de Deblestia Shell
 
 - une session Hyprland fonctionnelle ;
 - `caelestia-cli` ;
@@ -89,17 +156,16 @@ n'est associé au VID/PID concerné.
 
 Caelestia est principalement empaqueté pour Arch et Nix. Sous Debian, compilez
 Quickshell git et Caelestia selon leurs documentations officielles ;
-`install-v2.sh` s'arrête proprement si les deux commandes indispensables ne sont
+`install-deblestia-shell.sh` s'arrête proprement si les deux commandes indispensables ne sont
 pas disponibles.
 
 ```bash
-chmod +x install-v2.sh
-./install-v2.sh check
-./install-v2.sh install
+./install-deblestia-shell.sh check
+./install-deblestia-shell.sh install
 ```
 
-L'installateur v2 est indépendant et propose aussi `status`, `restore` et le mode
-`--dry-run`. `./install-v2.sh` sans argument reste équivalent à `install`.
+L'installateur Deblestia Shell est indépendant et propose aussi `status`,
+`restore` et le mode `--dry-run`. Sans argument, il reste équivalent à `install`.
 
 L'installateur sauvegarde les fichiers concernés dans
 `~/.config/debian-immersive-v2-backup-*`, pose le profil dans
@@ -125,18 +191,31 @@ portable, l'écran interne est généralement nommé `eDP-1` et une sortie HDMI
 
 ### Verrouillage sous Debian
 
-Le raccourci de verrouillage privilégie `/usr/bin/hyprlock`, fourni par le paquet
-Debian et intégré à PAM. Cela évite qu'une compilation installée dans
-`/usr/local/bin` masque la version du système et refuse un mot de passe valide.
+Le raccourci `Super+L` ouvre en priorité le verrouillage natif de Caelestia.
+Si son IPC ou sa compatibilité PAM ne sont pas disponibles, il utilise
+`/usr/bin/hyprlock`, fourni par Debian, comme solution de repli sécurisée.
+
+L'écran verrouillé natif de Caelestia utilise également `pam_faillock`. Sur
+Debian, son compteur utilisateur peut être absent et chaque tentative est alors
+affichée à tort comme un mot de passe incorrect. La commande suivante installe
+le compteur persistant attendu, sans modifier le mot de passe :
+
+```bash
+./install-deblestia-shell.sh pam-fix
+```
+
+La commande demande les droits administrateur uniquement pour créer la règle
+`/etc/tmpfiles.d/deblestia-caelestia-faillock.conf`. Elle est réappliquée
+automatiquement à chaque démarrage.
 
 ### Profil d'affichage OLED
 
-Le profil v2 applique au démarrage une température neutre de 6500 K et un gamma
+Le profil Deblestia Shell applique au démarrage une température neutre de 6500 K et un gamma
 prononcé de 70 % avec `hyprsunset`. Le raccourci `Super+Shift+O` bascule entre ce
 rendu plus sombre et les couleurs neutres. Les valeurs peuvent être ajustées avec
 `CAELESTIA_DISPLAY_GAMMA` et `CAELESTIA_DISPLAY_TEMPERATURE`.
 
-### MPVpaper Engine
+## MPVpaper Engine — fonds d'écran vidéo
 
 Une interface GTK 4 permet de gérer les fonds d'écran vidéo avec miniatures,
 recherche, import, choix du moniteur, volume, vitesse, décodage matériel et pause
@@ -182,12 +261,18 @@ Installez-la puis ouvrez-la depuis le menu des
 applications ou avec le bouton **Fond d'écran** situé en bas de l'écran :
 
 ```bash
-sudo apt install gir1.2-webkit-6.0 yt-dlp
-chmod +x install-mpvpaper-engine.sh
-./install-mpvpaper-engine.sh
+sudo apt update
+sudo apt install ffmpeg ffmpegthumbnailer python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-webkit-6.0 yt-dlp
+./install-mpvpaper-engine.sh check
+./install-mpvpaper-engine.sh install
 ```
 
-#### Guide d'utilisation
+La commande `mpvpaper` doit également être installée. Si votre version de Debian
+ne la fournit pas, suivez la procédure de compilation du
+[projet mpvpaper](https://github.com/GhostNaN/mpvpaper) avec Meson, Ninja et
+`libmpv-dev`, puis relancez la commande `check` ci-dessus.
+
+### Guide d'utilisation
 
 1. Ouvrez **MPVpaper Engine** avec le bouton **Fond d'écran** situé en bas de
    Caelestia ou depuis le menu des applications. Appuyer une seconde fois sur
@@ -289,22 +374,128 @@ sélectionnée, ouvre un terminal d'autorisation et l'installe dans le thème SD
 après saisie du mot de passe administrateur.
 SDDM ne prenant pas en charge `mpvpaper`, l'écran de connexion reste une image fixe.
 
-## v1 — Debian Glass / Waybar
+## PeriphX — centre de contrôle matériel
+
+PeriphX est préparé comme un composant indépendant. Son manifeste se
+trouve dans `config/v3/components.tsv` et sa feuille de route dans
+`docs/V3-ROADMAP.md`. Il ne modifie ni Deblestia Bar ni Deblestia Shell.
+
+Installez le centre de contrôle matériel avec :
+
+```bash
+./install-periphx.sh check
+./install-periphx.sh install
+./install-periphx.sh launch
+```
+
+Après avoir ajouté `~/.local/bin` au `PATH`, lancez PeriphX ainsi :
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+periphx
+```
+
+La CLI expose l'inventaire et l'inspection détaillée sans écrire vers le matériel :
+
+```bash
+periphx-cli list
+periphx-cli inspect DEVICE_ID
+periphx-cli interfaces DEVICE_ID
+periphx-cli capture DEVICE_ID --duration-ms 1000
+```
+
+La capture n'ouvre que les nœuds `hidraw` rattachés au périphérique sélectionné,
+avec `O_RDONLY`, une durée maximale de 30 secondes et au plus 1 000 reports. Si
+les permissions Linux refusent la lecture, PeriphX renvoie une erreur explicite
+et ne modifie jamais les permissions du périphérique automatiquement.
+
+Des manifests de pilotes custom peuvent être validés, installés et mis à jour en
+lecture seule. Le format et ses garanties de sécurité sont décrits dans
+[`docs/PERIPHX-CUSTOM-DRIVERS.md`](docs/PERIPHX-CUSTOM-DRIVERS.md).
+
+Il affiche les périphériques USB/HID, Bluetooth, claviers, souris, écrans et manettes détectés
+par Debian. Les capacités DDC/CI, OpenRGB, evdev/uinput et les profils sont
+indiqués séparément ; un périphérique propriétaire ne sera pas piloté sans backend
+compatible ni permission explicite.
+
+L'interface graphique de PeriphX nécessite les bindings Python de GTK 4 et de
+Libadwaita. `cargo` est recommandé pour compiler le démon `pericored` :
+
+```bash
+sudo apt update
+sudo apt install python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 cargo
+```
+
+`pericored` agrège les nœuds `event`, `mouse` et `hidraw` par périphérique physique.
+Son pilote HID générique décode chaque interface et son descripteur, calcule une
+empreinte SHA-256 et reste strictement en lecture seule tant qu'aucun pilote validé
+n'est associé au VID/PID concerné.
+
+## Deblestia Nova — Waybar en îlots
+
+Deblestia Nova est une seconde configuration Waybar inspirée de l'organisation
+visuelle de Caelestia : plusieurs capsules translucides flottent en haut de
+l'écran et regroupent les fonctions par contexte. Elle ne remplace pas la barre
+verticale Deblestia Bar.
+
+Nova est le profil Waybar sélectionné par défaut par `install.sh`. Deblestia Bar
+reste disponible avec `install-deblestia-bar.sh` ou avec le sélecteur de profil.
+
+Fonctions supplémentaires de Nova :
+
+- fenêtre active, lanceurs rapides et bureaux avec icônes d'applications ;
+- lecteur MPRIS complet et panneau multimédia GTK ;
+- tiroirs extensibles pour CPU, mémoire, température, disque et outils ;
+- volume et luminosité réglables à la molette ;
+- état réseau, Bluetooth, batterie et profil d'énergie ;
+- indicateurs de confidentialité pour le microphone, la caméra et le partage ;
+- historique du presse-papiers, capture de zone et pipette couleur ;
+- palettes Rose, Tokyo, Nord, Gruvbox, Mono et couleurs du fond d'écran ;
+- notifications, veille, mises à jour APT, tray et panneau d'alimentation ;
+- accès permanent à MPVpaper Engine dans le coin inférieur droit.
+
+Les commandes enrichies utilisent, lorsqu'elles sont installées, `brightnessctl`,
+`cliphist`, `grim`, `hyprpicker`, `powerprofilesctl`, `slurp`, `swaync-client` et
+`wl-copy`. Leur absence désactive uniquement le bouton concerné.
+
+Le bouton palette du tiroir d'outils applique les couleurs sans redémarrer la
+session. La commande équivalente accepte `rose`, `tokyo`, `nord`, `gruvbox`,
+`mono` ou `wallpaper` :
+
+```bash
+~/.config/waybar/deblestia-theme.sh tokyo
+```
+
+```bash
+./install-deblestia-nova.sh check
+./install-deblestia-nova.sh
+```
+
+Après installation, un clic droit sur le logo Debian permet de basculer entre
+Nova et Bar. La même action est disponible en ligne de commande :
+
+```bash
+~/.config/waybar/deblestia-waybar-switch.sh nova
+~/.config/waybar/deblestia-waybar-switch.sh bar
+```
+
+## Deblestia Bar — barre Waybar verticale
 
 Une surcouche réutilisable pour les dotfiles
 [KooL Hyprland](https://github.com/JaKooLit/Hyprland-Dots), pensée pour Debian.
 
-## Fonctionnalités
+### Fonctionnalités
 
-- barre Waybar « Debian Glass » adaptative ;
+- barre Waybar « Deblestia Bar » verticale et flottante sur le côté gauche,
+  inspirée de Caelestia ;
 - bureaux avec icônes des applications ouvertes ;
 - mini-lecteur MPRIS inspiré de Spotify ;
-- visualiseur audio Cava ;
+- lecteur multimédia compact adapté à la barre latérale ;
 - commandes précédent, lecture/pause et suivant ;
 - panneau multimédia GTK avec volume et sortie audio ;
 - couleurs pilotées par `panel-colors.css`.
 
-## Installation
+### Installation
 
 Cette configuration suppose une session Hyprland et les dotfiles KooL déjà
 installés. Elle nécessite notamment `waybar`, `playerctl`, `cava`, `jq`,
@@ -312,15 +503,21 @@ installés. Elle nécessite notamment `waybar`, `playerctl`, `cava`, `jq`,
 `rofi`, `kitty` et `btop`.
 
 ```bash
-git clone https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git
+sudo apt update
+sudo apt install waybar playerctl cava jq python3 python3-gi python3-gi-cairo gir1.2-gtk-3.0 wireplumber pulseaudio-utils rofi kitty btop
+```
+
+```bash
+git clone --depth 1 https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git
 cd Debian-Hyprland-Custom
-./install.sh
+./install-deblestia-bar.sh check
+./install-deblestia-bar.sh
 ```
 
 L’installateur sauvegarde la configuration Waybar active avant de poser les
 fichiers. Déconnectez-vous puis reconnectez-vous si Waybar ne se recharge pas.
 
-## Commandes du lecteur
+### Commandes du lecteur
 
 - clic sur le titre : ouvre le panneau multimédia ;
 - clic du milieu sur le titre : lecture/pause ;
@@ -331,6 +528,10 @@ fichiers. Déconnectez-vous puis reconnectez-vous si Waybar ne se recharge pas.
 
 - Projet et dotfiles originaux : [@JaKooLit](https://github.com/JaKooLit)
 - Personnalisation Debian : [@kebemouhamet08-gif](https://github.com/kebemouhamet08-gif)
+- Galerie et principes de collection : [ydots](https://github.com/hugthebox/ydots)
+- Thèmes instantanés et architecture modulaire étudiés dans
+  [Lyne Dots](https://github.com/caioax/lyne-dots) et
+  [Minflair](https://github.com/t4lentles5/minflair).
 - Dédicace aux communautés Debian, Hyprland et Caelestia, dont le travail rend
   cette configuration possible.
 

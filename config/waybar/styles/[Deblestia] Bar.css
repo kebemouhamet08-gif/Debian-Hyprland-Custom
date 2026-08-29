@@ -15,23 +15,34 @@
   font-weight: 600;
 }
 
-window#waybar { background: transparent; color: @text; }
+window#waybar {
+  background: transparent;
+  color: @text;
+}
+
+window#waybar > box {
+  background: rgba(8, 9, 14, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+  padding: 6px 4px;
+}
 
 #custom-debian-menu, #custom-menu, #workspace-strip, #app-strip, #media-player,
 #session-strip, #clock, #custom-weather, #cpu, #memory, #temperature,
 #disk, #network, #bluetooth, #battery, #custom-wallpaper {
   background: @glass;
   border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 10px;
+  border-radius: 14px;
   box-shadow: 0 2px 7px rgba(0, 0, 0, 0.45);
-  margin: 2px 1px;
-  padding: 3px 9px;
+  margin: 2px 3px;
+  padding: 8px 5px;
 }
 
-#workspace-strip, #app-strip, #session-strip { padding: 0 4px; }
+#workspace-strip, #app-strip, #session-strip { padding: 4px 0; }
 
 #media-player {
-  padding: 0 5px;
+  padding: 4px 0;
   border-color: @accent_soft;
   background: @glass;
 }
@@ -52,21 +63,21 @@ window#waybar { background: transparent; color: @text; }
   background: transparent;
   border: none;
   box-shadow: none;
-  margin: 0;
-  padding: 4px 9px;
+  margin: 1px 0;
+  padding: 8px 5px;
 }
 
 #mpris {
   color: @text;
-  min-width: 120px;
-  padding: 4px 10px;
+  min-width: 18px;
+  padding: 8px 5px;
 }
 
 #mpris.playing { color: @accent; }
 #mpris.paused { color: @muted; }
 #custom-cava_mviz {
   color: @accent;
-  padding: 4px 7px;
+  padding: 8px 5px;
   font-size: 14px;
 }
 
@@ -75,8 +86,8 @@ window#waybar { background: transparent; color: @text; }
 #custom-media-next {
   color: @text;
   background: transparent;
-  min-width: 16px;
-  padding: 4px 6px;
+  min-width: 18px;
+  padding: 8px 5px;
 }
 
 #custom-media-play-pause {
@@ -110,7 +121,7 @@ window#waybar { background: transparent; color: @text; }
   color: @accent;
   font-size: 18px;
   border-color: @accent_soft;
-  padding: 3px 13px;
+  padding: 9px 5px;
 }
 
 #workspaces { padding: 2px 5px; }
@@ -130,12 +141,12 @@ window#waybar { background: transparent; color: @text; }
 #workspaces button.urgent { color: white; background: @accent; }
 
 #custom-terminal, #custom-files, #custom-browser,
-#custom-notifications, #custom-overview, #custom-power { padding: 4px 11px; }
+#custom-notifications, #custom-overview, #custom-power { padding: 8px 5px; }
 #custom-power, #custom-notifications { color: #ff708f; }
 #custom-restore-minimized {
   color: #f1fa8c;
   border-color: rgba(241, 250, 140, 0.48);
-  padding: 4px 11px;
+  padding: 8px 5px;
 }
 #custom-wallpaper {
   color: #ff708f;
@@ -160,3 +171,18 @@ tooltip {
   border-radius: 10px;
 }
 tooltip label { color: @text; padding: 6px; }
+
+#clock {
+  color: @text;
+  font-size: 11px;
+  padding: 7px 4px;
+}
+
+#custom-weather, #network, #bluetooth, #battery {
+  min-width: 20px;
+  padding: 8px 4px;
+}
+
+#tray {
+  padding: 6px 3px;
+}

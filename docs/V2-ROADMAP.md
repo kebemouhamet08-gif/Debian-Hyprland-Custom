@@ -1,7 +1,7 @@
-# Feuille de route v2 — Debian Immersive
+# Feuille de route v2 — Deblestia Shell
 
 La v2 est une expérience autonome construite autour de Caelestia, MPVpaper Engine
-et de concepts adaptés de HyDE. Elle coexiste avec la v1 « Debian Glass », mais ne
+et de concepts adaptés de HyDE. Elle coexiste avec la v1 « Deblestia Bar », mais ne
 la remplace pas et n'en dépend pas. Elle ne reprend ni l'installateur Arch Linux ni
 ses commandes `pacman`/AUR.
 
@@ -34,7 +34,7 @@ le même résultat et chaque fichier remplacé est restaurable.
 - définir un format de thème commun pour GTK, Qt, Hyprland, Caelestia/Waybar,
   Kitty, Rofi et les fonds d'écran ;
 - installer, activer et supprimer un thème sans toucher aux autres profils ;
-- migrer « Debian Glass » comme premier thème compatible.
+- migrer « Deblestia Bar » comme premier thème compatible.
 
 Validation : le changement de thème est atomique et le retour au thème précédent
 fonctionne sans reconnexion lorsque les applications le permettent.

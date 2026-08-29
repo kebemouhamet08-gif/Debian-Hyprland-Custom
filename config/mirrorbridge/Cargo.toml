@@ -1,0 +1,10 @@
+[package]
+name = "mirrorbridge"
+version = "0.1.0"
+edition = "2021"
+description = "Android and iPhone screen mirroring frontend for Debian"
+license = "MIT"
+
+[dependencies]
+anyhow = "1"
+gtk = { package = "gtk4", version = "0.11" }

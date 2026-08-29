@@ -25,7 +25,7 @@ def command(*args):
 
 class MediaPanel(Gtk.Window):
     def __init__(self):
-        GLib.set_prgname("debian-glass-media")
+        GLib.set_prgname("deblestia-bar-media")
         super().__init__(title="Centre multimédia")
         self.set_default_size(520, 410)
         self.set_resizable(False)

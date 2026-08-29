@@ -11,18 +11,38 @@ systemd_dir="$HOME/.config/systemd/user"
 timestamp="$(date +%Y%m%d-%H%M%S)"
 backup_dir="$HOME/.config/mpvpaper-engine-backup-$timestamp"
 
-for command_name in mpvpaper ffmpeg ffmpegthumbnailer ffprobe python3 systemctl systemd-run hyprctl yt-dlp; do
-    if ! command -v "$command_name" >/dev/null 2>&1; then
-        printf 'Dépendance manquante : %s\n' "$command_name" >&2
-        exit 1
-    fi
-done
+check_dependencies() {
+    local command_name failed=0
+    for command_name in mpvpaper ffmpeg ffmpegthumbnailer ffprobe python3 systemctl systemd-run hyprctl yt-dlp; do
+        if command -v "$command_name" >/dev/null 2>&1; then
+            printf 'OK       %s\n' "$command_name"
+        else
+            printf 'MANQUANT %s\n' "$command_name" >&2
+            failed=1
+        fi
+    done
 
-python3 -c "import gi; gi.require_version('Adw', '1'); gi.require_version('Gtk', '4.0'); gi.require_version('WebKit', '6.0')" \
-    2>/dev/null || {
-        printf 'Dépendances GTK manquantes : python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1 ou gir1.2-webkit-6.0.\n' >&2
-        exit 1
-    }
+    if python3 -c "import gi; gi.require_version('Adw', '1'); gi.require_version('Gtk', '4.0'); gi.require_version('WebKit', '6.0')" \
+        2>/dev/null; then
+        printf 'OK       GTK4, Libadwaita et WebKitGTK 6.0\n'
+    else
+        printf 'MANQUANT python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1 ou gir1.2-webkit-6.0\n' >&2
+        failed=1
+    fi
+    return "$failed"
+}
+
+action="${1:-install}"
+if [ "$action" = check ]; then
+    check_dependencies
+    exit
+fi
+if [ "$action" != install ]; then
+    printf 'Usage : %s [check|install]\n' "$0" >&2
+    exit 2
+fi
+
+check_dependencies
 
 mkdir -p "$backup_dir" "$install_dir" "$bin_dir" "$desktop_dir" "$systemd_dir"
 for path in "$install_dir" "$bin_dir/mpvpaper-engine" "$bin_dir/mpvpaper-enginectl" \

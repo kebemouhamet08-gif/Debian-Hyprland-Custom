@@ -1,7 +1,7 @@
 # Feuille de route v3 — Debian Next
 
-La V3 sera une expérience indépendante de la V1 Debian Glass et de la V2 Debian
-Immersive. Elle ne remplacera aucune version existante et conservera ses propres
+La V3 sera une expérience indépendante de Deblestia Bar et Deblestia Shell. Elle
+ne remplacera aucune version existante et conservera ses propres
 réglages, sauvegardes, manifeste et installateur.
 
 ## Direction initiale

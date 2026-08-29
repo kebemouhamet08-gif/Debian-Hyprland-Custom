@@ -33,14 +33,14 @@ path_marker="$state_dir/path-added-by-installer"
 
 usage() {
     cat <<'EOF'
-Usage : ./install-v3.sh [check|install|dev|launch|status|restore] [--dry-run]
+Usage : ./install-periphx.sh [check|install|dev|launch|status|restore] [--dry-run]
 
-  check       vérifie le manifeste et les prérequis V3
-  install     initialise l'état isolé de la V3
+  check       vérifie le manifeste et les prérequis de PeriphX
+  install     installe ou actualise PeriphX
     dev         utilise directement le code source PeriphX du dépôt
     launch      lance le centre de contrôle matériel
-  status      affiche l'état V3
-  restore     retire l'état V3 sans toucher à V1 ou V2
+  status      affiche l'état de PeriphX
+  restore     retire PeriphX sans toucher à Deblestia Bar ou Deblestia Shell
   --dry-run   affiche les écritures prévues
 EOF
 }
@@ -51,8 +51,21 @@ log_action() {
 
 check_v3() {
     local failed=0
+    if command -v python3 >/dev/null 2>&1; then
+        printf 'OK       python3\n'
+    else
+        printf 'MANQUANT python3\n' >&2
+        failed=1
+    fi
+    if python3 -c "import gi; gi.require_version('Adw', '1'); gi.require_version('Gtk', '4.0')" \
+        2>/dev/null; then
+        printf 'OK       GTK4 et Libadwaita\n'
+    else
+        printf 'MANQUANT python3-gi, gir1.2-gtk-4.0 ou gir1.2-adw-1\n' >&2
+        failed=1
+    fi
     if [ -f "$manifest" ]; then
-        printf 'OK       manifeste V3\n'
+        printf 'OK       manifeste PeriphX\n'
     else
         printf 'MANQUANT manifeste : %s\n' "$manifest" >&2
         failed=1
@@ -110,7 +123,7 @@ install_v3() {
         printf 'version=3\ncreated_at=%s\n' "$(date +%Y%m%d-%H%M%S)" >"$state_file"
         printf '%s\tinstall\n' "$(date +%Y%m%d-%H%M%S)" >>"$history_file"
     fi
-    printf 'Socle Debian Next V3 initialisé : %s\n' "$state_dir"
+    printf 'PeriphX installé : %s\n' "$state_dir"
     printf 'Lancement direct : %s\n' "$app_target"
     printf 'Commande PeriphX : %s\n' "$app_command"
     # Afficher la commande littérale à copier.
@@ -191,7 +204,7 @@ ensure_local_bin_path() {
 
 launch_v3() {
     if [ ! -x "$launcher_target" ]; then
-        printf 'Application V3 absente. Lancez : %s install\n' "$0" >&2
+        printf 'PeriphX absent. Lancez : %s install\n' "$0" >&2
         return 1
     fi
     exec "$launcher_target"
@@ -199,17 +212,17 @@ launch_v3() {
 
 status_v3() {
     if [ -f "$state_file" ]; then
-        printf 'OK       état V3 : %s\n' "$state_file"
+        printf 'OK       état PeriphX : %s\n' "$state_file"
         cat "$state_file"
     else
-        printf 'ABSENT   état V3 : %s\n' "$state_file"
+        printf 'ABSENT   état PeriphX : %s\n' "$state_file"
         return 1
     fi
 }
 
 restore_v3() {
     if ((dry_run)); then
-        log_action "supprimer l'état V3 $state_dir"
+        log_action "supprimer l'état PeriphX $state_dir"
         return
     fi
     if command -v systemctl >/dev/null 2>&1; then
@@ -224,7 +237,7 @@ restore_v3() {
         "$cli_target" "$bin_dir/periphx-cli" "$launcher_target" "$pericore_command" \
         "$pericore_target" "$pericore_target.new" "$service_target"
     rm -rf "$state_dir"
-    printf 'État V3 supprimé. Les fichiers V1 et V2 n ont pas été touchés.\n'
+    printf 'PeriphX supprimé. Deblestia Bar et Deblestia Shell n ont pas été touchés.\n'
 }
 
 action="${1:-install}"

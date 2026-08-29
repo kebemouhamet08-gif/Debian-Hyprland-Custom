@@ -28,5 +28,5 @@ if command -v qs >/dev/null 2>&1; then
 fi
 
 command -v notify-send >/dev/null 2>&1 && notify-send \
-    "Debian Immersive v2" \
+    "Deblestia Shell v2" \
     "Caelestia indisponible : installez caelestia-cli et Quickshell git."

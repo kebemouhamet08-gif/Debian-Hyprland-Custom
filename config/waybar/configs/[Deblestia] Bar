@@ -6,32 +6,31 @@
     "$HOME/.config/waybar/ModulesCustom"
   ],
   "layer": "top",
-  "position": "top",
-  "height": 42,
+  "position": "left",
+  "width": 56,
   "exclusive": true,
   "fixed-center": true,
   "ipc": true,
-  "spacing": 6,
-  "margin-top": 6,
+  "spacing": 5,
+  "margin-top": 10,
+  "margin-bottom": 10,
   "margin-left": 8,
-  "margin-right": 8,
 
   "modules-left": [
     "custom/debian-menu",
-    "group/workspace-strip",
+    "group/workspace-strip"
+  ],
+  "modules-center": [
     "group/app-strip",
     "group/media-player"
   ],
-  "modules-center": ["clock", "custom/weather"],
   "modules-right": [
-    "cpu",
-    "memory",
-    "temperature",
-    "disk",
+    "custom/weather",
     "network",
     "bluetooth",
     "battery",
-    "group/session-strip"
+    "group/session-strip",
+    "clock"
   ],
 
   "group/workspace-strip": {
@@ -48,7 +47,6 @@
   "group/media-player": {
     "orientation": "inherit",
     "modules": [
-      "custom/cava_mviz",
       "mpris",
       "custom/media-previous",
       "custom/media-play-pause",
@@ -62,9 +60,10 @@
 
   "custom/debian-menu": {
     "format": "",
-    "tooltip-format": "Applications",
+    "tooltip-format": "Applications · Milieu : layouts · Droit : Bar/Nova",
     "on-click": "pkill rofi || rofi -show drun -theme $HOME/.config/rofi/DebianGlass.rasi",
-    "on-click-right": "$HOME/.config/hypr/scripts/WaybarLayout.sh"
+    "on-click-middle": "$HOME/.config/hypr/scripts/WaybarLayout.sh",
+    "on-click-right": "$HOME/.config/waybar/deblestia-waybar-switch.sh"
   },
   "hyprland/workspaces": {
     "format": "{name}",
@@ -101,14 +100,14 @@
   "custom/browser": {"format": "", "tooltip-format": "Firefox", "on-click": "firefox"},
   "clock": {
     "interval": 1,
-    "format": "  {:%a %d %b     %H:%M}",
+    "format": "{:%H\n%M}",
     "format-alt": "{:%A %d %B %Y   %H:%M:%S}",
     "tooltip-format": "<big>{:%B %Y}</big>\n<tt><small>{calendar}</small></tt>"
   },
   "mpris": {
     "interval": 1,
-    "format": "{player_icon}  {dynamic}",
-    "format-paused": "{status_icon}  {dynamic}",
+    "format": "{player_icon}",
+    "format-paused": "{status_icon}",
     "dynamic-order": ["artist", "title"],
     "dynamic-len": 28,
     "on-click": "$HOME/.config/waybar/media-panel-toggle.sh",
@@ -135,26 +134,33 @@
     "on-click": "playerctl next"
   },
   "custom/weather": {
-    "format": "  {}",
+    "format": "",
     "exec": "$HOME/.config/hypr/UserScripts/Weather.sh",
     "return-type": "json",
     "interval": 900
   },
-  "cpu": {"interval": 2, "format": "  {usage}%", "on-click": "$HOME/.config/waybar/debian-glass-stats.sh"},
-  "memory": {"interval": 5, "format": "  {percentage}%", "on-click": "$HOME/.config/waybar/debian-glass-stats.sh"},
+  "cpu": {"interval": 2, "format": "  {usage}%", "on-click": "$HOME/.config/waybar/deblestia-bar-stats.sh"},
+  "memory": {"interval": 5, "format": "  {percentage}%", "on-click": "$HOME/.config/waybar/deblestia-bar-stats.sh"},
   "temperature": {"interval": 5, "format": " {temperatureC}°C", "critical-threshold": 85},
   "disk": {"interval": 30, "path": "/", "format": "󰋊 {percentage_used}%"},
   "network": {
     "interval": 2,
-    "format-wifi": "  {bandwidthDownBytes}   {bandwidthUpBytes} ",
-    "format-ethernet": "󰈀 {bandwidthDownBytes}   {bandwidthUpBytes} ",
-    "format-disconnected": "󰖪"
+    "format-wifi": "",
+    "format-ethernet": "󰈀",
+    "format-disconnected": "󰖪",
+    "tooltip-format-wifi": "{essid}\n↓ {bandwidthDownBytes}  ↑ {bandwidthUpBytes}",
+    "tooltip-format-ethernet": "{ifname}\n↓ {bandwidthDownBytes}  ↑ {bandwidthUpBytes}"
   },
-  "bluetooth": {"format": " {status}", "format-disabled": ""},
+  "bluetooth": {
+    "format": "",
+    "format-connected": "",
+    "format-disabled": "",
+    "tooltip-format": "Bluetooth : {status}"
+  },
   "battery": {
     "states": {"warning": 30, "critical": 15},
-    "format": "{icon} {capacity}%",
-    "format-charging": " {capacity}%",
+    "format": "{icon}",
+    "format-charging": "",
     "format-icons": ["", "", "", "", ""],
     "tooltip-format": "Batterie {capacity}%\nClic : choisir le profil énergie",
     "on-click": "$HOME/.config/waybar/power-profile-menu.sh"
@@ -174,7 +180,7 @@
   "custom/overview": {
     "format": "󰍹",
     "tooltip-format": "Panneau système",
-    "on-click": "$HOME/.config/waybar/debian-glass-stats.sh"
+    "on-click": "$HOME/.config/waybar/deblestia-bar-stats.sh"
   },
   "custom/power": {"format": "", "on-click": "$HOME/.config/hypr/scripts/Wlogout.sh"}
 },

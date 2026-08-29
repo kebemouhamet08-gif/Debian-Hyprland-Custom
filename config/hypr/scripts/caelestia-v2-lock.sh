@@ -2,11 +2,28 @@
 
 set -u
 
-# Prefer Debian's packaged binary. A locally compiled copy in /usr/local/bin
-# can otherwise shadow it and use a different PAM configuration.
+# Prefer Caelestia's native lock when its Debian PAM compatibility file is
+# available. If the shell is not running or IPC fails, keep Hyprlock as a
+# secure fallback.
+faillock_file="/run/faillock/$(id -un)"
+caelestia_cli=""
 debian_hyprlock="/usr/bin/hyprlock"
 wallpaper_selector="$HOME/.config/hypr/UserScripts/RandomLockScreen.sh"
 
+if [ -x "$HOME/.nix-profile/bin/caelestia" ]; then
+    caelestia_cli="$HOME/.nix-profile/bin/caelestia"
+elif command -v caelestia >/dev/null 2>&1; then
+    caelestia_cli="$(command -v caelestia)"
+fi
+
+if [ -n "$caelestia_cli" ] && [ -r "$faillock_file" ] && [ -w "$faillock_file" ]; then
+    if "$caelestia_cli" shell lock lock; then
+        exit 0
+    fi
+fi
+
+# Prefer Debian's packaged Hyprlock binary for the fallback. A locally
+# compiled copy in /usr/local/bin can otherwise use a different PAM setup.
 if [ -x "$debian_hyprlock" ]; then
     if [ -x "$wallpaper_selector" ]; then
         "$wallpaper_selector" --select-only

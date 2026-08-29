@@ -1,0 +1,11 @@
+/* Palette Deblestia Nova active. Modifiée par deblestia-theme.sh. */
+@define-color nova_bg rgba(34, 28, 27, 0.88);
+@define-color nova_bg_soft rgba(50, 40, 37, 0.74);
+@define-color nova_hover rgba(117, 89, 76, 0.72);
+@define-color nova_accent #e4b79f;
+@define-color nova_accent_strong #f2c7ad;
+@define-color nova_text #f8eee8;
+@define-color nova_muted #cbbab0;
+@define-color nova_good #a8d8ad;
+@define-color nova_warning #f1c27d;
+@define-color nova_danger #ff7f87;

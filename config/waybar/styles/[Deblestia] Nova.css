@@ -1,0 +1,144 @@
+@define-color nova_bg rgba(34, 28, 27, 0.88);
+@define-color nova_bg_soft rgba(50, 40, 37, 0.74);
+@define-color nova_hover rgba(117, 89, 76, 0.72);
+@define-color nova_accent #e4b79f;
+@define-color nova_accent_strong #f2c7ad;
+@define-color nova_text #f8eee8;
+@define-color nova_muted #cbbab0;
+@define-color nova_good #a8d8ad;
+@define-color nova_warning #f1c27d;
+@define-color nova_danger #ff7f87;
+@import url("panel-colors.css");
+@import url("theme-overrides.css");
+
+* {
+  border: none;
+  border-radius: 0;
+  min-height: 0;
+  font-family: "JetBrainsMono Nerd Font", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+window#waybar {
+  background: transparent;
+  color: @nova_text;
+}
+
+#identity, #workspace-strip, #launchers, #media-player,
+#system-monitor, #tools, #status, #session, #custom-wallpaper {
+  background: @nova_bg;
+  border: 1px solid rgba(255, 238, 226, 0.13);
+  border-radius: 16px;
+  box-shadow: 0 5px 15px rgba(15, 10, 9, 0.38);
+  margin: 2px 0;
+  padding: 2px 6px;
+}
+
+#identity { border-color: rgba(228, 183, 159, 0.34); }
+#media-player {
+  background: rgba(40, 32, 30, 0.92);
+  border-color: rgba(228, 183, 159, 0.38);
+  padding: 2px 8px;
+}
+
+#custom-debian-menu, #custom-terminal, #custom-files, #custom-browser,
+#custom-workspace1, #custom-workspace2, #custom-workspace3,
+#custom-workspace4, #custom-workspace5, #custom-media-previous,
+#custom-media-play-pause, #custom-media-next, #custom-overview,
+#custom-toolbox, #custom-theme, #custom-screenshot, #custom-clipboard, #custom-hyprpicker,
+#custom-wallpaper, #cpu, #memory, #temperature, #disk, #idle_inhibitor,
+#privacy, #backlight, #pulseaudio, #network, #bluetooth,
+#power-profiles-daemon, #battery, #custom-updates, #custom-notifications,
+#tray, #clock, #custom-power {
+  background: transparent;
+  color: @nova_text;
+  border-radius: 11px;
+  margin: 1px;
+  padding: 5px 7px;
+}
+
+#custom-debian-menu {
+  color: @nova_accent_strong;
+  font-size: 17px;
+  padding: 4px 9px;
+}
+
+#window {
+  color: @nova_muted;
+  margin: 0 4px 0 1px;
+  padding: 4px 6px;
+}
+
+#custom-workspace1, #custom-workspace2, #custom-workspace3,
+#custom-workspace4, #custom-workspace5 {
+  color: @nova_muted;
+  min-width: 18px;
+  padding: 5px 6px;
+}
+
+#custom-workspace1.active, #custom-workspace2.active,
+#custom-workspace3.active, #custom-workspace4.active,
+#custom-workspace5.active {
+  color: #352925;
+  background: @nova_accent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+#mpris {
+  color: @nova_text;
+  min-width: 150px;
+  padding: 5px 10px;
+}
+#mpris.playing { color: @nova_accent_strong; }
+#mpris.paused { color: @nova_muted; }
+#custom-media-play-pause { color: @nova_accent_strong; font-size: 15px; }
+
+#system-monitor .nova-drawer, #tools .nova-drawer {
+  color: @nova_muted;
+}
+#custom-overview, #custom-toolbox, #custom-theme { color: @nova_accent_strong; }
+#cpu { color: #c5d8f0; }
+#memory { color: #d4c1ed; }
+#temperature { color: @nova_warning; }
+#disk { color: #bad6c1; }
+
+#privacy-item.screenshare { color: @nova_danger; }
+#privacy-item.audio-in { color: @nova_warning; }
+#privacy-item.video-in { color: @nova_danger; }
+#idle_inhibitor.activated { color: @nova_good; }
+#battery.warning { color: @nova_warning; }
+#battery.critical { color: @nova_danger; }
+#battery.charging { color: @nova_good; }
+#custom-updates.pending { color: @nova_warning; }
+#custom-power { color: @nova_danger; font-size: 15px; }
+
+#custom-debian-menu:hover, #custom-terminal:hover, #custom-files:hover,
+#custom-browser:hover, #custom-workspace1:hover, #custom-workspace2:hover,
+#custom-workspace3:hover, #custom-workspace4:hover, #custom-workspace5:hover,
+#custom-media-previous:hover, #custom-media-play-pause:hover,
+#custom-media-next:hover, #custom-overview:hover, #custom-toolbox:hover, #custom-theme:hover,
+#custom-screenshot:hover, #custom-clipboard:hover, #custom-hyprpicker:hover,
+#custom-wallpaper:hover, #cpu:hover, #memory:hover, #temperature:hover,
+#disk:hover, #idle_inhibitor:hover, #backlight:hover, #pulseaudio:hover,
+#network:hover, #bluetooth:hover, #power-profiles-daemon:hover,
+#battery:hover, #custom-updates:hover, #custom-notifications:hover,
+#clock:hover, #custom-power:hover {
+  background: @nova_hover;
+  color: @nova_text;
+}
+
+window#waybar.nova-wallpaper #custom-wallpaper {
+  background: @nova_bg;
+  border: 1px solid rgba(228, 183, 159, 0.34);
+  border-radius: 15px;
+  color: @nova_accent_strong;
+  padding: 7px 13px;
+}
+
+tooltip {
+  background: rgba(29, 23, 22, 0.97);
+  border: 1px solid rgba(228, 183, 159, 0.38);
+  border-radius: 12px;
+}
+tooltip label { color: @nova_text; padding: 7px; }

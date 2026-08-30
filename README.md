@@ -322,6 +322,10 @@ ne la fournit pas, suivez la procédure de compilation du
    thème** : le réglage est conservé dans la session et utilisé par les
    applications compatibles. MPVpaper Engine synchronise `gsettings` et les
    configurations GTK 3/4 afin d'éviter qu'un ancien réglage remplace le choix.
+   Le bouton **󰸉 Adapter tout au fond choisi** extrait une frame rendue de la
+   vidéo sélectionnée et envoie sa palette à Deblestia Nova/Matugen ainsi qu'à
+   toutes les Waybar. Il adapte donc le shell et les applications compatibles
+   sans remplacer, interrompre ni masquer le fond animé.
    Les nouvelles collections peuvent être installées
    dans `~/.themes` pour GTK et `~/.icons` pour les icônes ou curseurs ; elles
    apparaîtront dans les listes au prochain lancement de MPVpaper Engine.

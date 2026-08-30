@@ -9,14 +9,21 @@ panel_colors="$HOME/.config/waybar/panel-colors.css"
 state_file="$HOME/.config/waybar/.panel-state"
 skip_wallust=0
 reload_waybars=0
+no_start=0
 
-for option in "$@"; do
-    case "$option" in
+while [ "$#" -gt 0 ]; do
+    case "$1" in
         --from-wallust) skip_wallust=1 ;;
         --reload) reload_waybars=1 ;;
-        --no-start) ;;
+        --no-start) no_start=1 ;;
+        --wallpaper)
+            [ "$#" -ge 2 ] || exit 2
+            wallpaper="$2"
+            shift
+            ;;
         *) exit 2 ;;
     esac
+    shift
 done
 
 if [ "$skip_wallust" -eq 0 ] && command -v wallust >/dev/null 2>&1 && \
@@ -68,7 +75,7 @@ if [ "$reload_waybars" -eq 1 ]; then
     pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || true
 fi
 
-if [[ " $* " == *" --no-start "* ]] || [ "$reload_waybars" -eq 1 ]; then
+if [ "$no_start" -eq 1 ] || [ "$reload_waybars" -eq 1 ]; then
     exit 0
 fi
 

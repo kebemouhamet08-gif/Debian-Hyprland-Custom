@@ -204,13 +204,20 @@ def capture_filter(config):
 
 
 def capture_wallpaper(output, config):
-    destination = capture_path(output)
     source_result = ipc_request(output, ["get_property", "path"])
     position_result = ipc_request(output, ["get_property", "time-pos"])
     source = Path(str(source_result.get("data", ""))).expanduser()
     if not source.is_file():
         raise RuntimeError("le fichier du fond MPV actif est introuvable")
     position = max(0, float(position_result.get("data") or 0))
+    return capture_source_wallpaper(source, output, config, position)
+
+
+def capture_source_wallpaper(source, output, config, position=2.0):
+    source = Path(source).expanduser()
+    if not source.is_file() or source.suffix.lower() not in VIDEO_EXTENSIONS:
+        raise RuntimeError("le fond vidéo choisi est introuvable ou non pris en charge")
+    destination = capture_path(output)
     temporary = destination.with_name(f".{destination.stem}.new.png")
     result = subprocess.run([
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
@@ -223,6 +230,59 @@ def capture_wallpaper(output, config):
     temporary.replace(destination)
     destination.chmod(0o600)
     return destination
+
+
+def adapt_desktop_theme(output, config, wallpaper=None):
+    """Génère les palettes du bureau depuis une frame, sans remplacer le fond vidéo."""
+    frame = (capture_source_wallpaper(wallpaper, output, config)
+             if wallpaper else capture_wallpaper(output, config))
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    integrations = []
+    failures = []
+
+    nova_candidates = (
+        config_home / "quickshell" / "deblestia-nova" / "scripts" / "colors" / "switchwall.sh",
+        config_home / "quickshell" / "ii" / "scripts" / "colors" / "switchwall.sh",
+    )
+    nova_script = next((path for path in nova_candidates if path.is_file()), None)
+    if nova_script:
+        result = subprocess.run(
+            [str(nova_script), "--noswitch", "--image", str(frame)],
+            capture_output=True, text=True, timeout=180, check=False,
+        )
+        if result.returncode == 0:
+            integrations.append("Nova et applications")
+        else:
+            failures.append(result.stderr.strip() or result.stdout.strip() or "palette Nova")
+
+    waybar_script = config_home / "hypr" / "UserScripts" / "WaybarWallpaperSync.sh"
+    if waybar_script.is_file():
+        result = subprocess.run(
+            [str(waybar_script), "--wallpaper", str(frame), "--reload", "--no-start"],
+            capture_output=True, text=True, timeout=60, check=False,
+        )
+        if result.returncode == 0:
+            integrations.append("Waybar")
+        else:
+            failures.append(result.stderr.strip() or "palette Waybar")
+
+    if not nova_script and not waybar_script.is_file():
+        wallust = shutil.which("wallust")
+        if wallust:
+            result = subprocess.run(
+                [wallust, "run", "-s", str(frame)], capture_output=True,
+                text=True, timeout=60, check=False,
+            )
+            if result.returncode == 0:
+                integrations.append("Wallust")
+            else:
+                failures.append(result.stderr.strip() or "palette Wallust")
+
+    if failures:
+        raise RuntimeError("; ".join(failures))
+    if not integrations:
+        raise RuntimeError("aucun moteur de thème compatible n’est installé")
+    return frame, integrations
 
 
 def stop(output=None):
@@ -333,10 +393,11 @@ def main():
     parser = argparse.ArgumentParser(description="Contrôleur de MPVpaper Engine")
     parser.add_argument("action", choices=(
         "play", "random", "stop", "restore", "status", "apply-colors", "preview-colors",
-        "capture",
+        "capture", "adapt-theme",
     ))
     parser.add_argument("--output", default=None, help="écran ciblé pour les couleurs")
     parser.add_argument("--settings", default=None, help="réglages couleur JSON à prévisualiser")
+    parser.add_argument("--wallpaper", default=None, help="fond vidéo choisi pour la palette")
     args = parser.parse_args()
     config = load_config()
 
@@ -376,7 +437,7 @@ def main():
         except (OSError, RuntimeError, json.JSONDecodeError) as error:
             print(f"mpvpaper-engine: {error}", file=sys.stderr)
             return 1
-    elif args.action == "capture":
+    elif args.action in ("capture", "adapt-theme"):
         output = args.output or config.get("output", "*")
         if not valid_output_name(output):
             print("mpvpaper-engine: nom d’écran invalide", file=sys.stderr)
@@ -390,7 +451,13 @@ def main():
             if args.settings:
                 preview = json.loads(args.settings)
                 profile.update({key: preview[key] for key in COLOR_DEFAULTS if key in preview})
-            print(capture_wallpaper(output, profile))
+            if args.action == "adapt-theme":
+                frame, integrations = adapt_desktop_theme(
+                    output, profile, wallpaper=args.wallpaper,
+                )
+                print(f"{frame}\t{', '.join(integrations)}")
+            else:
+                print(capture_wallpaper(output, profile))
         except (OSError, RuntimeError, ValueError, json.JSONDecodeError,
                 subprocess.TimeoutExpired) as error:
             print(f"mpvpaper-engine: {error}", file=sys.stderr)

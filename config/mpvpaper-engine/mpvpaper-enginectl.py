@@ -232,9 +232,62 @@ def capture_source_wallpaper(source, output, config, position=2.0):
     return destination
 
 
+def video_duration(source):
+    result = subprocess.run([
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", str(source),
+    ], capture_output=True, text=True, timeout=8, check=False)
+    try:
+        return max(0.1, float(result.stdout.strip()))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def capture_palette_source(source, output, config):
+    """Compose quatre instants de la vidéo pour obtenir une palette plus stable."""
+    source = Path(source).expanduser()
+    if not source.is_file() or source.suffix.lower() not in VIDEO_EXTENSIONS:
+        raise RuntimeError("le fond vidéo choisi est introuvable ou non pris en charge")
+    duration = video_duration(source)
+    if not duration:
+        return capture_source_wallpaper(source, output, config)
+
+    base = capture_path(output)
+    destination = base.with_name(f"{base.stem}-theme.png")
+    temporary = destination.with_name(f".{destination.stem}.new.png")
+    positions = [duration * ratio for ratio in (0.12, 0.37, 0.62, 0.87)]
+    command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
+    for position in positions:
+        command.extend(["-ss", f"{position:.3f}", "-i", str(source)])
+    filters = []
+    rendered = capture_filter(config)
+    for index in range(4):
+        filters.append(
+            f"[{index}:v]scale=480:270:force_original_aspect_ratio=increase,"
+            f"crop=480:270,{rendered}[v{index}]"
+        )
+    filters.append(
+        "[v0][v1][v2][v3]xstack=inputs=4:"
+        "layout=0_0|w0_0|0_h0|w0_h0[out]"
+    )
+    command.extend([
+        "-filter_complex", ";".join(filters), "-map", "[out]",
+        "-frames:v", "1", str(temporary),
+    ])
+    result = subprocess.run(
+        command, capture_output=True, text=True, timeout=30, check=False,
+    )
+    if result.returncode != 0 or not temporary.is_file() or not temporary.stat().st_size:
+        temporary.unlink(missing_ok=True)
+        return capture_source_wallpaper(source, output, config, duration * 0.5)
+    temporary.replace(destination)
+    destination.chmod(0o600)
+    return destination
+
+
 def adapt_desktop_theme(output, config, wallpaper=None):
     """Génère les palettes du bureau depuis une frame, sans remplacer le fond vidéo."""
-    frame = (capture_source_wallpaper(wallpaper, output, config)
+    frame = (capture_palette_source(wallpaper, output, config)
              if wallpaper else capture_wallpaper(output, config))
     config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     integrations = []
@@ -247,7 +300,8 @@ def adapt_desktop_theme(output, config, wallpaper=None):
     nova_script = next((path for path in nova_candidates if path.is_file()), None)
     if nova_script:
         result = subprocess.run(
-            [str(nova_script), "--noswitch", "--image", str(frame)],
+            [str(nova_script), "--noswitch", "--image", str(frame),
+             "--type", "scheme-tonal-spot"],
             capture_output=True, text=True, timeout=180, check=False,
         )
         if result.returncode == 0:

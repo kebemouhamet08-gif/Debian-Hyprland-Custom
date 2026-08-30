@@ -322,8 +322,8 @@ ne la fournit pas, suivez la procédure de compilation du
    thème** : le réglage est conservé dans la session et utilisé par les
    applications compatibles. MPVpaper Engine synchronise `gsettings` et les
    configurations GTK 3/4 afin d'éviter qu'un ancien réglage remplace le choix.
-   Le bouton **󰸉 Adapter tout au fond choisi** extrait une frame rendue de la
-   vidéo sélectionnée et envoie sa palette à Deblestia Nova/Matugen ainsi qu'à
+   Le bouton **󰸉 Adapter tout au fond choisi** analyse plusieurs scènes rendues
+   de la vidéo sélectionnée et envoie leur palette équilibrée à Deblestia Nova/Matugen ainsi qu'à
    toutes les Waybar. Il adapte donc le shell et les applications compatibles
    sans remplacer, interrompre ni masquer le fond animé.
    Les nouvelles collections peuvent être installées

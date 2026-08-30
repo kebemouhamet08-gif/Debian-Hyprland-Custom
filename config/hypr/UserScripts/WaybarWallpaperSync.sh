@@ -41,6 +41,18 @@ hex_to_rgb() {
     printf '%d, %d, %d' "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
 }
 
+# Teinte le verre avec la couleur dominante tout en gardant assez de contraste.
+mix_hex_rgb() {
+    local base="${1#\#}" tint="${2#\#}" tint_percent="${3:-18}"
+    local base_percent=$((100 - tint_percent)) channel mixed values=()
+    for channel in 0 2 4; do
+        mixed=$(( (16#${base:channel:2} * base_percent + \
+                   16#${tint:channel:2} * tint_percent) / 100 ))
+        values+=("$mixed")
+    done
+    printf '%d, %d, %d' "${values[@]}"
+}
+
 accent="$(css_color color13)"
 text="$(css_color foreground)"
 background="$(css_color background)"
@@ -50,7 +62,7 @@ text="${text:-#f3edf2}"
 background="${background:-#0e0f16}"
 muted="${muted:-#b8aeb8}"
 accent_rgb="$(hex_to_rgb "$accent")"
-background_rgb="$(hex_to_rgb "$background")"
+background_rgb="$(mix_hex_rgb "$background" "$accent" 18)"
 opacity="$(sed -n 's/^opacity=//p' "$state_file" 2>/dev/null | tail -n 1)"
 opacity="${opacity:-0.86}"
 temporary="$(mktemp "$HOME/.config/waybar/.panel-colors.XXXXXX")"

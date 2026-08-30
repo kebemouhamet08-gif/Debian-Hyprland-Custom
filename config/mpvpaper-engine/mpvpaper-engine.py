@@ -1580,8 +1580,9 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             css_classes=["heading"],
         ))
         adapt_box.append(Gtk.Label(
-            label=("Extrait une image du fond choisi puis adapte Nova, les Waybar, "
-                   "GTK et les applications compatibles, sans arrêter la vidéo."),
+            label=("Analyse plusieurs scènes du fond choisi puis harmonise Nova, "
+                   "les Waybar, GTK et les applications compatibles, sans arrêter "
+                   "la vidéo."),
             xalign=0, wrap=True, css_classes=["dim-label"],
         ))
         self.adapt_theme_button = Gtk.Button(

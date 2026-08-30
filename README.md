@@ -507,6 +507,10 @@ Navigation entre bureaux : faites défiler la molette sur les boutons de bureaux
 de Waybar, ou glissez horizontalement avec trois doigts sur le pavé tactile.
 Ces gestes suivent les bureaux du moniteur actif.
 
+Les profils Waybar fournis synchronisent également leur fond, leur accent et leur
+texte avec la palette Wallust du fond d'écran courant via
+`WaybarWallpaperSync.sh`.
+
 ## Deblestia Nova Lite — Waybar en îlots
 
 Deblestia Nova Lite est une barre Waybar horizontale qui reprend l'organisation

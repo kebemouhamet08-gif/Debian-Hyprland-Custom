@@ -10,6 +10,7 @@ v2_layout="[CUSTOM] Debian Glass V2 - Immersive"
 suite="$HOME/.config/waybar/debian-glass-suite.sh"
 caelestia_launcher="$HOME/.config/hypr/scripts/caelestia-v2-launch.sh"
 nova_launcher="$HOME/.config/hypr/scripts/deblestia-nova-shell-launch.sh"
+palette_sync="$HOME/.config/hypr/UserScripts/WaybarWallpaperSync.sh"
 
 set_hypr_keyword() {
     hyprctl keyword "$1" "$2" >/dev/null 2>&1 || true
@@ -101,6 +102,10 @@ if [ "$layout" = "no panel" ]; then
     suite_off
     pkill -x waybar 2>/dev/null || true
     exit 0
+fi
+
+if [ -x "$palette_sync" ]; then
+    "$palette_sync" --no-start >/dev/null 2>&1 || true
 fi
 
 if [ "$layout" = "[CUSTOM] Debian Glass" ]; then

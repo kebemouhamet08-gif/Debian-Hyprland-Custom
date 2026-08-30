@@ -16,6 +16,7 @@ hypr_include="$hypr_dir/deblestia-nova-shell.conf"
 input_include="$hypr_dir/deblestia-input.conf"
 launch_target="$hypr_dir/scripts/deblestia-nova-shell-launch.sh"
 mode_target="$hypr_dir/scripts/desktop-shell-mode.sh"
+palette_target="$hypr_dir/UserScripts/WaybarWallpaperSync.sh"
 lock_target="$hypr_dir/scripts/deblestia-nova-lock.sh"
 backup_root="$config_home/deblestia-nova-backups"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/deblestia-nova"
@@ -128,7 +129,7 @@ install_shell() {
         "$repo_dir/config/nova-shell/qt68-compat.patch"
 
     mkdir -p "$backup_dir/files" "$state_dir" "$hypr_dir/scripts" \
-        "$(dirname "$target")" "$waybar_dir/configs"
+        "$(dirname "$target")" "$waybar_dir/configs" "$hypr_dir/UserScripts"
     : >"$backup_dir/manifest.tsv"
     record_file "$target" quickshell "$backup_dir"
     record_file "$settings_file" settings.json "$backup_dir"
@@ -136,6 +137,7 @@ install_shell() {
     record_file "$input_include" input-include.conf "$backup_dir"
     record_file "$launch_target" launch.sh "$backup_dir"
     record_file "$mode_target" desktop-shell-mode.sh "$backup_dir"
+    record_file "$palette_target" waybar-wallpaper-sync.sh "$backup_dir"
     record_file "$selector_target" nova-selector-entry "$backup_dir"
     record_file "$lock_target" lock.sh "$backup_dir"
     record_file "$hypr_main" hyprland.conf "$backup_dir"
@@ -149,6 +151,8 @@ install_shell() {
     install -m 0644 "$repo_dir/config/hypr/deblestia-input.conf" "$input_include"
     install -m 0755 "$repo_dir/config/hypr/scripts/deblestia-nova-shell-launch.sh" "$launch_target"
     install -m 0755 "$repo_dir/config/hypr/scripts/desktop-shell-mode.sh" "$mode_target"
+    install -m 0755 "$repo_dir/config/hypr/UserScripts/WaybarWallpaperSync.sh" \
+        "$palette_target"
     install -m 0644 "$repo_dir/config/waybar/configs/[Deblestia] Nova" "$selector_target"
     install -m 0755 "$repo_dir/config/hypr/scripts/deblestia-nova-lock.sh" "$lock_target"
     merge_settings

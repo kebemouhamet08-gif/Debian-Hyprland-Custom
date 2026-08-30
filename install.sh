@@ -7,6 +7,7 @@ config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 waybar_dir="$config_home/waybar"
 hypr_dir="$config_home/hypr"
 hypr_scripts_dir="$config_home/hypr/scripts"
+hypr_user_scripts_dir="$config_home/hypr/UserScripts"
 hypr_main="$hypr_dir/hyprland.conf"
 input_include="$hypr_dir/deblestia-input.conf"
 input_source="source = $input_include"
@@ -73,6 +74,7 @@ check_dependencies "$variant"
 
 mkdir -p "$backup_dir/waybar" "$backup_dir/hypr" "$waybar_dir/configs" \
     "$waybar_dir/styles" "$hypr_scripts_dir"
+mkdir -p "$hypr_user_scripts_dir"
 
 for path in \
     "$waybar_dir/config" \
@@ -98,6 +100,8 @@ done
 
 cp -a "$repo_dir/config/waybar/." "$waybar_dir/"
 cp -a "$repo_dir/config/hypr/scripts/." "$hypr_scripts_dir/"
+install -m 0755 "$repo_dir/config/hypr/UserScripts/WaybarWallpaperSync.sh" \
+    "$hypr_user_scripts_dir/WaybarWallpaperSync.sh"
 install -m 0644 "$repo_dir/config/hypr/deblestia-input.conf" "$input_include"
 if [ ! -f "$hypr_main" ]; then
     printf '%s\n' "$input_source" >"$hypr_main"

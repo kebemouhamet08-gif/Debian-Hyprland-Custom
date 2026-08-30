@@ -10,12 +10,12 @@
   "position": "top",
   "height": 46,
   "exclusive": true,
-  "fixed-center": true,
+  "fixed-center": false,
   "ipc": true,
-  "spacing": 8,
-  "margin-top": 5,
-  "margin-left": 8,
-  "margin-right": 8,
+  "spacing": 6,
+  "margin-top": 7,
+  "margin-left": 10,
+  "margin-right": 10,
 
   "modules-left": [
     "group/identity",

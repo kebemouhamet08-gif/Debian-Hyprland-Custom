@@ -218,16 +218,16 @@ tooltip {
 }
 tooltip label { color: @nova_text; padding: 7px; }
 
-/* Lecteur Spotify directement intégré à Deblestia Nova. */
+/* Lecteur central accordé à la palette Nova active. */
 #media-player {
-  background: rgba(18, 18, 18, 0.94);
-  border-color: rgba(29, 185, 84, 0.55);
+  background: @nova_bg;
+  border-color: alpha(@nova_accent, 0.42);
   box-shadow: none;
 }
 
 #custom-cava_mviz {
   background: transparent;
-  color: #1db954;
+  color: @nova_accent;
   font-size: 13px;
   font-weight: 700;
   margin: 0 5px 0 2px;
@@ -235,20 +235,20 @@ tooltip label { color: @nova_text; padding: 7px; }
   padding: 4px 2px;
 }
 
-#mpris.playing { color: #1ed760; }
-#mpris.paused { color: #b3b3b3; }
+#mpris.playing { color: @nova_text; }
+#mpris.paused { color: @nova_muted; }
 
 #custom-media-previous,
 #custom-media-next {
-  color: #b3b3b3;
+  color: @nova_muted;
   border-radius: 50%;
   min-width: 24px;
   padding: 5px;
 }
 
 #custom-media-play-pause {
-  background: #1db954;
-  color: #090909;
+  background: @nova_accent_strong;
+  color: @nova_bg;
   border-radius: 50%;
   min-height: 26px;
   min-width: 26px;
@@ -262,6 +262,6 @@ tooltip label { color: @nova_text; padding: 7px; }
 }
 
 #custom-media-play-pause:hover {
-  background: #1ed760;
-  color: #000000;
+  background: @nova_text;
+  color: @nova_bg;
 }

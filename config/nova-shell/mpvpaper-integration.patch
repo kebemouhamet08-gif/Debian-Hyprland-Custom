@@ -33,23 +33,32 @@ index a5cf86e..dedd28e 100644
 diff --git a/modules/ii/bar/UtilButtons.qml b/modules/ii/bar/UtilButtons.qml
 --- a/modules/ii/bar/UtilButtons.qml
 +++ b/modules/ii/bar/UtilButtons.qml
-@@ -192,12 +192,16 @@ Item {
+@@ -190,17 +190,21 @@ Item {
+         Component {
+             id: wallpaperM3
              UtilButton {
-                 iconText: "imagesmode"
-                 onClicked: GlobalStates.wallpaperSelectorOpen = !GlobalStates.wallpaperSelectorOpen
-+                altAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine-toggle`])
-+                middleClickAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-enginectl`, "random"])
+-                iconText: "imagesmode"
+-                onClicked: GlobalStates.wallpaperSelectorOpen = !GlobalStates.wallpaperSelectorOpen
++                iconText: "animated_images"
++                onClicked: Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine-toggle`])
++                altAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-enginectl`, "random"])
++                middleClickAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine`, "--colors"])
              }
          }
          Component {
              id: legacyWallpaper
              CircleUtilButton {
-                 onClicked: GlobalStates.wallpaperSelectorOpen = !GlobalStates.wallpaperSelectorOpen
-+                altAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine-toggle`])
-+                middleClickAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-enginectl`, "random"])
+-                onClicked: GlobalStates.wallpaperSelectorOpen = !GlobalStates.wallpaperSelectorOpen
++                onClicked: Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine-toggle`])
++                altAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-enginectl`, "random"])
++                middleClickAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine`, "--colors"])
                  MaterialSymbol {
                      horizontalAlignment: Qt.AlignHCenter
-                     fill: 0; text: "imagesmode"
+-                    fill: 0; text: "imagesmode"
++                    fill: 0; text: "animated_images"
+                     iconSize: Appearance.font.pixelSize.large
+                     color: Appearance.colors.colOnLayer2
+                 }
 diff --git a/modules/ii/wallpaperSelector/WallpaperSelectorContent.qml b/modules/ii/wallpaperSelector/WallpaperSelectorContent.qml
 --- a/modules/ii/wallpaperSelector/WallpaperSelectorContent.qml
 +++ b/modules/ii/wallpaperSelector/WallpaperSelectorContent.qml

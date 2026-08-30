@@ -60,6 +60,12 @@ window#waybar {
   padding: 5px 7px;
 }
 
+#launchers #custom-wallpaper {
+  color: @nova_muted;
+  font-size: 14px;
+  padding: 5px 6px;
+}
+
 #custom-debian-menu {
   color: @nova_accent_strong;
   font-size: 17px;

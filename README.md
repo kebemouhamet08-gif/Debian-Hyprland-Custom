@@ -377,8 +377,9 @@ fond peut être restauré automatiquement à l'ouverture de la session Hyprland.
 Chaque écran peut conserver un fond et des réglages différents : appliquer un fond
 à `eDP-1` ne redémarre plus celui de `HDMI-A-1`. Le choix **Tous les écrans** remplace
 volontairement les affectations individuelles par un fond commun.
-Sur toutes les configurations Waybar fournies, un clic droit sur le module de fond
-d'écran choisit une vidéo aléatoire en conservant les réglages MPVpaper actifs.
+Toutes les configurations Waybar fournies affichent une icône MPVpaper discrète
+dans leur groupe d'applications. Le clic gauche ouvre ou ferme le moteur, le clic
+droit choisit une vidéo aléatoire et le clic milieu ouvre les réglages de couleurs.
 Le raccourci `Super+W` reste réservé au sélecteur standard de fonds d'écran fixes.
 Le bouton **Utiliser pour l'écran de connexion** extrait une image de la vidéo
 sélectionnée, ouvre un terminal d'autorisation et l'installe dans le thème SDDM
@@ -541,7 +542,7 @@ Fonctions supplémentaires de Nova Lite :
 - notifications, veille, mises à jour APT, tray et panneau d'alimentation ;
 - centre Focus inspiré de l'approche modulaire d'end4-pC : Pomodoro persistant,
   pauses courtes/longues et notes locales ;
-- accès à MPVpaper Engine depuis le tiroir d'outils.
+- accès direct et discret à MPVpaper Engine dans le groupe des lanceurs.
 
 Les commandes enrichies utilisent, lorsqu'elles sont installées, `brightnessctl`,
 `cliphist`, `grim`, `hyprpicker`, `powerprofilesctl`, `slurp`, `swaync-client` et
@@ -582,6 +583,7 @@ Une surcouche réutilisable pour les dotfiles
 - lecteur multimédia compact adapté à la barre latérale ;
 - commandes précédent, lecture/pause et suivant ;
 - panneau multimédia GTK avec volume et sortie audio ;
+- raccourci MPVpaper intégré à la barre principale, sans barre flottante séparée ;
 - couleurs pilotées par `panel-colors.css`.
 
 ### Installation

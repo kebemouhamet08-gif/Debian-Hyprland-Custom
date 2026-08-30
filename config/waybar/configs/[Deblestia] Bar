@@ -42,7 +42,7 @@
   },
   "group/app-strip": {
     "orientation": "inherit",
-    "modules": ["custom/terminal", "custom/files", "custom/browser"]
+    "modules": ["custom/terminal", "custom/files", "custom/browser", "custom/wallpaper"]
   },
   "group/media-player": {
     "orientation": "inherit",
@@ -98,6 +98,14 @@
   },
   "custom/files": {"format": "", "tooltip-format": "Fichiers", "on-click": "thunar"},
   "custom/browser": {"format": "", "tooltip-format": "Firefox", "on-click": "firefox"},
+  "custom/wallpaper": {
+    "format": "󰸉",
+    "tooltip": true,
+    "tooltip-format": "MPVpaper Engine\nClic gauche : ouvrir/fermer\nClic droit : fond vidéo aléatoire\nClic milieu : couleurs",
+    "on-click": "$HOME/.local/bin/mpvpaper-engine-toggle",
+    "on-click-right": "$HOME/.local/bin/mpvpaper-enginectl random",
+    "on-click-middle": "$HOME/.local/bin/mpvpaper-engine --colors"
+  },
   "clock": {
     "interval": 1,
     "format": "{:%H\n%M}",
@@ -183,23 +191,5 @@
     "on-click": "$HOME/.config/waybar/deblestia-bar-stats.sh"
   },
   "custom/power": {"format": "", "on-click": "$HOME/.config/hypr/scripts/Wlogout.sh"}
-},
-{
-  "name": "wallpaper-corner",
-  "layer": "top",
-  "position": "bottom",
-  "height": 44,
-  "exclusive": false,
-  "passthrough": false,
-  "margin-bottom": 12,
-  "margin-right": 12,
-  "modules-right": ["custom/wallpaper"],
-  "custom/wallpaper": {
-    "format": "󰸉  Fond d’écran",
-    "tooltip": true,
-    "tooltip-format": "Clic gauche : fonds vidéo MPVpaper\nClic droit : fond vidéo aléatoire",
-    "on-click": "$HOME/.local/bin/mpvpaper-engine-toggle",
-    "on-click-right": "$HOME/.local/bin/mpvpaper-enginectl random"
-  }
 }
 ]

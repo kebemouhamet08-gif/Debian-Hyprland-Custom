@@ -55,6 +55,7 @@ window#waybar > box {
 #app-strip #custom-terminal,
 #app-strip #custom-files,
 #app-strip #custom-browser,
+#app-strip #custom-wallpaper,
 #session-strip #tray,
 #session-strip #custom-restore-minimized,
 #session-strip #custom-notifications,
@@ -149,9 +150,9 @@ window#waybar > box {
   padding: 8px 5px;
 }
 #custom-wallpaper {
-  color: #ff708f;
-  border-color: @accent_soft;
-  padding: 7px 13px;
+  color: @muted;
+  border-color: transparent;
+  padding: 8px 5px;
 }
 #temperature.critical, #battery.critical { color: #ff4d6d; }
 #battery.charging { color: #8bd49c; }

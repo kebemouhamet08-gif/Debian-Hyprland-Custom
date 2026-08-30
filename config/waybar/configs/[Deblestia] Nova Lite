@@ -46,7 +46,7 @@
   },
   "group/launchers": {
     "orientation": "inherit",
-    "modules": ["custom/terminal", "custom/files", "custom/browser", "wlr/taskbar"]
+    "modules": ["custom/terminal", "custom/files", "custom/browser", "custom/wallpaper", "wlr/taskbar"]
   },
   "group/media-player": {
     "orientation": "inherit",
@@ -79,7 +79,7 @@
     },
     "modules": [
       "custom/toolbox", "custom/theme", "custom/screenshot", "custom/clipboard",
-      "custom/hyprpicker", "custom/wallpaper"
+      "custom/hyprpicker"
     ]
   },
   "group/status": {
@@ -206,9 +206,10 @@
   },
   "custom/wallpaper": {
     "format": "󰸉",
-    "tooltip-format": "Fonds vidéo · Clic droit : aléatoire",
+    "tooltip-format": "MPVpaper Engine\nClic gauche : ouvrir/fermer\nClic droit : fond vidéo aléatoire\nClic milieu : couleurs",
     "on-click": "$HOME/.local/bin/mpvpaper-engine-toggle",
-    "on-click-right": "$HOME/.local/bin/mpvpaper-enginectl random"
+    "on-click-right": "$HOME/.local/bin/mpvpaper-enginectl random",
+    "on-click-middle": "$HOME/.local/bin/mpvpaper-engine --colors"
   },
 
   "idle_inhibitor": {

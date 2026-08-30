@@ -504,6 +504,11 @@ Raccourcis principaux : `Super+Espace` recherche, `Super+Échap` réglages,
 `Super+N` panneau droit, `Super+Maj+N` panneau gauche, `Super+Maj+W` fonds
 d'écran, `Super+Maj+B` barre et `Ctrl+Alt+Suppr` session.
 
+Le bouton de fonds de la barre Nova intègre MPVpaper Engine : clic gauche pour
+le sélecteur d'images Nova, clic droit pour ouvrir le moteur vidéo et clic milieu
+pour appliquer une vidéo aléatoire. Le sélecteur contient également une icône
+vidéo dédiée donnant accès aux mêmes commandes.
+
 Navigation entre bureaux : faites défiler la molette sur les boutons de bureaux
 de Waybar, ou glissez horizontalement avec trois doigts sur le pavé tactile.
 Ces gestes suivent les bureaux du moniteur actif.

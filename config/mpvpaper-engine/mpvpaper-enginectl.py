@@ -131,6 +131,12 @@ def run(command, check=False):
     return subprocess.run(command, check=check)
 
 
+def stop_static_wallpaper_services():
+    """Empêche les anciens changeurs d'images de recouvrir le fond vidéo."""
+    run(["pkill", "-f", r"(^|/)WallpaperAutoChange\.sh(?: |$)"])
+    run(["pkill", "-x", "swww-daemon"])
+
+
 def unit_for_output(output):
     suffix = "all" if output == "*" else re.sub(r"[^A-Za-z0-9_.-]", "-", output)
     return f"{UNIT_PREFIX}-{suffix}.service"
@@ -271,7 +277,7 @@ def play(config):
         stop(config["output"])
         stop("*")
         run(["systemctl", "--user", "stop", LEGACY_UNIT])
-    run(["pkill", "-x", "swww-daemon"])
+    stop_static_wallpaper_services()
     command = ["mpvpaper"]
     if config["auto_pause"]:
         command.extend(["--auto-pause", "--auto-mode", "full"])

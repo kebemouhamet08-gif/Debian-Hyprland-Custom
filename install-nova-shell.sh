@@ -125,8 +125,12 @@ install_shell() {
     printf '\nTéléchargement de la base end4-pC…\n'
     git clone --depth 1 "$source_url" "$staging/source"
     revision="$(git -C "$staging/source" rev-parse HEAD)"
-    git -C "$staging/source" apply --whitespace=nowarn \
-        "$repo_dir/config/nova-shell/qt68-compat.patch"
+    local patch_file
+    for patch_file in \
+        "$repo_dir/config/nova-shell/qt68-compat.patch" \
+        "$repo_dir/config/nova-shell/mpvpaper-integration.patch"; do
+        git -C "$staging/source" apply --whitespace=nowarn "$patch_file"
+    done
 
     mkdir -p "$backup_dir/files" "$state_dir" "$hypr_dir/scripts" \
         "$(dirname "$target")" "$waybar_dir/configs" "$hypr_dir/UserScripts"

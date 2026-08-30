@@ -85,11 +85,11 @@
       "class<steam|Steam>": " "
     }
   },
-  "custom/workspace1": {"exec": "$HOME/.config/waybar/workspace-label.sh 1", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 1"},
-  "custom/workspace2": {"exec": "$HOME/.config/waybar/workspace-label.sh 2", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 2"},
-  "custom/workspace3": {"exec": "$HOME/.config/waybar/workspace-label.sh 3", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 3"},
-  "custom/workspace4": {"exec": "$HOME/.config/waybar/workspace-label.sh 4", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 4"},
-  "custom/workspace5": {"exec": "$HOME/.config/waybar/workspace-label.sh 5", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 5"},
+  "custom/workspace1": {"exec": "$HOME/.config/waybar/workspace-label.sh 1", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 1", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace2": {"exec": "$HOME/.config/waybar/workspace-label.sh 2", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 2", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace3": {"exec": "$HOME/.config/waybar/workspace-label.sh 3", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 3", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace4": {"exec": "$HOME/.config/waybar/workspace-label.sh 4", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 4", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace5": {"exec": "$HOME/.config/waybar/workspace-label.sh 5", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 5", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
   "custom/terminal": {
     "format": "",
     "tooltip-format": "Clic gauche : terminal simple\nClic droit : dashboard plein écran",

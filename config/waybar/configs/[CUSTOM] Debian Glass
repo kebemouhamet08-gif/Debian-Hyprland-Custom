@@ -94,6 +94,8 @@
     "hyprland/workspaces": {
       "format": "{name}",
       "on-click": "activate",
+      "on-scroll-up": "hyprctl dispatch workspace -1",
+      "on-scroll-down": "hyprctl dispatch workspace +1",
       "persistent-workspaces": {
         "*": 10
       },

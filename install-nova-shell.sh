@@ -13,6 +13,7 @@ settings_file="$settings_dir/config.json"
 hypr_dir="$config_home/hypr"
 hypr_main="$hypr_dir/hyprland.conf"
 hypr_include="$hypr_dir/deblestia-nova-shell.conf"
+input_include="$hypr_dir/deblestia-input.conf"
 launch_target="$hypr_dir/scripts/deblestia-nova-shell-launch.sh"
 mode_target="$hypr_dir/scripts/desktop-shell-mode.sh"
 lock_target="$hypr_dir/scripts/deblestia-nova-lock.sh"
@@ -21,6 +22,7 @@ state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/deblestia-nova"
 state_file="$state_dir/last-backup"
 source_url="${DEBLESTIA_NOVA_SOURCE:-https://github.com/pctrade/end4-pC.git}"
 source_line="source = $hypr_include"
+input_source_line="source = $input_include"
 
 usage() {
     cat <<'EOF'
@@ -131,6 +133,7 @@ install_shell() {
     record_file "$target" quickshell "$backup_dir"
     record_file "$settings_file" settings.json "$backup_dir"
     record_file "$hypr_include" hypr-include.conf "$backup_dir"
+    record_file "$input_include" input-include.conf "$backup_dir"
     record_file "$launch_target" launch.sh "$backup_dir"
     record_file "$mode_target" desktop-shell-mode.sh "$backup_dir"
     record_file "$selector_target" nova-selector-entry "$backup_dir"
@@ -143,6 +146,7 @@ install_shell() {
     mv "$staging/source" "$target"
 
     install -m 0644 "$repo_dir/config/hypr/deblestia-nova-shell.conf" "$hypr_include"
+    install -m 0644 "$repo_dir/config/hypr/deblestia-input.conf" "$input_include"
     install -m 0755 "$repo_dir/config/hypr/scripts/deblestia-nova-shell-launch.sh" "$launch_target"
     install -m 0755 "$repo_dir/config/hypr/scripts/desktop-shell-mode.sh" "$mode_target"
     install -m 0644 "$repo_dir/config/waybar/configs/[Deblestia] Nova" "$selector_target"
@@ -154,6 +158,10 @@ install_shell() {
         printf '%s\n' "$source_line" >"$hypr_main"
     elif ! grep -Fqx "$source_line" "$hypr_main"; then
         printf '\n# Deblestia Nova — shell Quickshell\n%s\n' "$source_line" >>"$hypr_main"
+    fi
+    if ! grep -Fqx "$input_source_line" "$hypr_main"; then
+        printf '\n# Navigation souris et pavé tactile Deblestia\n%s\n' \
+            "$input_source_line" >>"$hypr_main"
     fi
 
     printf '%s\n' "$backup_dir" >"$state_file"

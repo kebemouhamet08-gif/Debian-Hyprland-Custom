@@ -5,7 +5,11 @@ set -euo pipefail
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 waybar_dir="$config_home/waybar"
+hypr_dir="$config_home/hypr"
 hypr_scripts_dir="$config_home/hypr/scripts"
+hypr_main="$hypr_dir/hyprland.conf"
+input_include="$hypr_dir/deblestia-input.conf"
+input_source="source = $input_include"
 timestamp="$(date +%Y%m%d-%H%M%S)"
 backup_dir="$config_home/debian-hyprland-custom-backup-$timestamp"
 
@@ -67,7 +71,8 @@ fi
 
 check_dependencies "$variant"
 
-mkdir -p "$backup_dir/waybar" "$waybar_dir/configs" "$waybar_dir/styles" "$hypr_scripts_dir"
+mkdir -p "$backup_dir/waybar" "$backup_dir/hypr" "$waybar_dir/configs" \
+    "$waybar_dir/styles" "$hypr_scripts_dir"
 
 for path in \
     "$waybar_dir/config" \
@@ -85,8 +90,20 @@ for path in \
     fi
 done
 
+for path in "$hypr_main" "$input_include"; do
+    if [ -e "$path" ] || [ -L "$path" ]; then
+        cp -a "$path" "$backup_dir/hypr/"
+    fi
+done
+
 cp -a "$repo_dir/config/waybar/." "$waybar_dir/"
 cp -a "$repo_dir/config/hypr/scripts/." "$hypr_scripts_dir/"
+install -m 0644 "$repo_dir/config/hypr/deblestia-input.conf" "$input_include"
+if [ ! -f "$hypr_main" ]; then
+    printf '%s\n' "$input_source" >"$hypr_main"
+elif ! grep -Fqx "$input_source" "$hypr_main"; then
+    printf '\n# Navigation souris et pavé tactile Deblestia\n%s\n' "$input_source" >>"$hypr_main"
+fi
 ln -sfn ../panel-colors.css "$waybar_dir/styles/panel-colors.css"
 if [ "$variant" = nova ]; then
     rm -f "$waybar_dir/configs/[Deblestia] Bar" \
@@ -117,6 +134,9 @@ if [ -x "$hypr_scripts_dir/desktop-shell-mode.sh" ]; then
     "$hypr_scripts_dir/desktop-shell-mode.sh" "$config_name"
 else
     pkill -SIGUSR2 -x waybar 2>/dev/null || true
+fi
+if command -v hyprctl >/dev/null 2>&1; then
+    hyprctl reload >/dev/null 2>&1 || true
 fi
 
 printf '%s installé. Sauvegarde : %s\n' "$product_name" "$backup_dir"

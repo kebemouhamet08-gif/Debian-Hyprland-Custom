@@ -503,6 +503,10 @@ Raccourcis principaux : `Super+Espace` recherche, `Super+Échap` réglages,
 `Super+N` panneau droit, `Super+Maj+N` panneau gauche, `Super+Maj+W` fonds
 d'écran, `Super+Maj+B` barre et `Ctrl+Alt+Suppr` session.
 
+Navigation entre bureaux : faites défiler la molette sur les boutons de bureaux
+de Waybar, ou glissez horizontalement avec trois doigts sur le pavé tactile.
+Ces gestes suivent les bureaux du moniteur actif.
+
 ## Deblestia Nova Lite — Waybar en îlots
 
 Deblestia Nova Lite est une barre Waybar horizontale qui reprend l'organisation

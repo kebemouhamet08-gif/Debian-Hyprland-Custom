@@ -37,7 +37,9 @@
     "orientation": "inherit",
     "modules": [
       "custom/workspace1", "custom/workspace2", "custom/workspace3",
-      "custom/workspace4", "custom/workspace5"
+      "custom/workspace4", "custom/workspace5", "custom/workspace6",
+      "custom/workspace7", "custom/workspace8", "custom/workspace9",
+      "custom/workspace10"
     ]
   },
   "group/app-strip": {
@@ -90,6 +92,11 @@
   "custom/workspace3": {"exec": "$HOME/.config/waybar/workspace-label.sh 3", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 3", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
   "custom/workspace4": {"exec": "$HOME/.config/waybar/workspace-label.sh 4", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 4", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
   "custom/workspace5": {"exec": "$HOME/.config/waybar/workspace-label.sh 5", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 5", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace6": {"exec": "$HOME/.config/waybar/workspace-label.sh 6", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 6", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace7": {"exec": "$HOME/.config/waybar/workspace-label.sh 7", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 7", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace8": {"exec": "$HOME/.config/waybar/workspace-label.sh 8", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 8", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace9": {"exec": "$HOME/.config/waybar/workspace-label.sh 9", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 9", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace10": {"exec": "$HOME/.config/waybar/workspace-label.sh 10", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 10", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
   "custom/terminal": {
     "format": "",
     "tooltip-format": "Clic gauche : terminal simple\nClic droit : dashboard plein écran",

@@ -128,7 +128,8 @@ install_shell() {
     local patch_file
     for patch_file in \
         "$repo_dir/config/nova-shell/qt68-compat.patch" \
-        "$repo_dir/config/nova-shell/mpvpaper-integration.patch"; do
+        "$repo_dir/config/nova-shell/mpvpaper-integration.patch" \
+        "$repo_dir/config/nova-shell/hyprland-ipc-compat.patch"; do
         git -C "$staging/source" apply --whitespace=nowarn "$patch_file"
     done
 

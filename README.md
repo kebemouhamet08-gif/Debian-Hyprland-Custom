@@ -514,6 +514,8 @@ Navigation entre bureaux : faites défiler la molette sur les boutons de bureaux
 de Waybar, ou glissez horizontalement avec trois doigts sur le pavé tactile.
 Ces gestes suivent les bureaux du moniteur actif. Les bureaux 1 à 10 sont déclarés
 persistants afin que le geste puisse atteindre les bureaux vides jusqu'au dixième.
+Dans la barre Nova, un clic gauche sur chaque numéro ouvre directement le bureau
+correspondant ; le backend utilise les commandes IPC compatibles avec Hyprland 0.53.
 
 Les profils Waybar fournis synchronisent également leur fond, leur accent et leur
 texte avec la palette Wallust du fond d'écran courant via

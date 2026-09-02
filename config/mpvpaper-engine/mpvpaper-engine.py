@@ -1574,6 +1574,32 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             xalign=0, wrap=True, css_classes=["dim-label"],
         ))
 
+        adapt_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        adapt_box.append(Gtk.Label(
+            label="Palette dynamique du fond vidéo", xalign=0,
+            css_classes=["heading"],
+        ))
+        adapt_box.append(Gtk.Label(
+            label=("Analyse plusieurs scènes du fond choisi puis harmonise Nova, "
+                   "les Waybar, GTK et les applications compatibles, sans arrêter "
+                   "la vidéo."),
+            xalign=0, wrap=True, css_classes=["dim-label"],
+        ))
+        self.adapt_theme_button = Gtk.Button(
+            label="󰸉  Adapter tout au fond choisi",
+            css_classes=["suggested-action"],
+        )
+        self.adapt_theme_button.set_tooltip_text(
+            "Synchroniser toutes les couleurs avec le fond vidéo sélectionné"
+        )
+        self.adapt_theme_button.connect("clicked", self.adapt_theme_to_wallpaper)
+        adapt_box.append(self.adapt_theme_button)
+        page.append(adapt_box)
+        self.theme_status = Gtk.Label(label="", xalign=0, wrap=True,
+                                      css_classes=["dim-label"])
+        page.append(self.theme_status)
+        page.append(Gtk.Separator(margin_top=4, margin_bottom=2))
+
         self.color_modes = ["Clair", "Sombre", "Selon le système"]
         schemes = {"prefer-light": "Clair", "prefer-dark": "Sombre",
                    "default": "Selon le système"}
@@ -1652,9 +1678,6 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             ))
         theme_search.connect("search-changed", self.filter_v2_themes)
         page.append(theme_list)
-        self.theme_status = Gtk.Label(label="", xalign=0, wrap=True,
-                                      css_classes=["dim-label"])
-        page.append(self.theme_status)
         scroll.set_child(page)
         return scroll
 
@@ -1689,6 +1712,41 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             )
         except GLib.Error as error:
             self.theme_status.set_text(f"Impossible d’appliquer le thème : {error.message}")
+
+    def adapt_theme_to_wallpaper(self, _button):
+        output = self.output_names[self.output.get_selected()]
+        command = [str(CONTROLLER), "adapt-theme", "--output", output]
+        if self.selected and self.selected.is_file():
+            command.extend(["--wallpaper", str(self.selected)])
+        if hasattr(self, "color_controls"):
+            command.extend(["--settings", json.dumps(self.current_colors())])
+        self.adapt_theme_button.set_sensitive(False)
+        self.theme_status.set_text(
+            "Analyse de la vidéo et adaptation de toutes les couleurs…"
+        )
+
+        def worker():
+            result = bounded_process(
+                command, timeout=240, capture_output=True, text=True,
+            )
+            GLib.idle_add(self.adapt_theme_finished, result)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def adapt_theme_finished(self, result):
+        self.adapt_theme_button.set_sensitive(True)
+        if result.returncode == 0:
+            fields = result.stdout.strip().split("\t", 1)
+            targets = fields[1] if len(fields) > 1 else "le bureau"
+            self.theme_status.set_text(
+                f"Palette du fond appliquée à : {targets}. La vidéo reste active."
+            )
+        else:
+            message = result.stderr.strip().splitlines()
+            self.theme_status.set_text(
+                message[-1] if message else "Impossible d’adapter le thème au fond choisi."
+            )
+        return False
 
     def apply_v2_theme(self, _button, theme_id, theme_name, button):
         if not V2_INSTALLER.is_file():

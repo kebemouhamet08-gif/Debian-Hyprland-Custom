@@ -2,22 +2,65 @@
 
 set -u
 
-# Laisser finir les autres exec-once, puis garder un seul panneau principal.
-sleep 2
-pkill -x waybar 2>/dev/null || true
+force_launch=false
+[ "${1:-}" = "--force" ] && force_launch=true
 
-# Certaines configurations KooL lancent Waybar un peu après les autres
-# applications de session. Un second passage empêche une barre concurrente.
+# Au démarrage de Hyprland, Nova ne s'ouvre que s'il est le profil mémorisé.
+# `--force` est utilisé par le sélecteur lors d'un changement explicite.
+active_layout="$(basename "$(readlink -f "$HOME/.config/waybar/config")" 2>/dev/null || true)"
+if ! $force_launch && [ "$active_layout" != "[Deblestia] Nova" ]; then
+    exit 0
+fi
+
+stop_legacy_panels() {
+    local suite="$HOME/.config/waybar/debian-glass-suite.sh" caelestia_pid
+
+    # Arrêter les contrôleurs avant Waybar : ils peuvent sinon recréer le rail
+    # latéral ou les panneaux auxiliaires après la fermeture du processus.
+    if [ -x "$suite" ]; then
+        "$suite" off >/dev/null 2>&1 || true
+    fi
+    if command -v caelestia >/dev/null 2>&1; then
+        caelestia shell -k >/dev/null 2>&1 || true
+    elif [ -x "$HOME/.nix-profile/bin/caelestia" ]; then
+        "$HOME/.nix-profile/bin/caelestia" shell -k >/dev/null 2>&1 || true
+    fi
+
+    # Certaines installations Nix ignorent `caelestia shell -k`. Identifier
+    # alors uniquement les instances dont le chemin de configuration contient
+    # caelestia-shell, puis les arrêter par PID via Quickshell.
+    if command -v qs >/dev/null 2>&1; then
+        while read -r caelestia_pid; do
+            [ -n "$caelestia_pid" ] || continue
+            qs kill --pid "$caelestia_pid" >/dev/null 2>&1 || true
+        done < <(
+            qs list --all 2>/dev/null | awk '
+                /Process ID:/ { pid = $3 }
+                /Config path:.*caelestia-shell/ { print pid }
+            '
+        )
+    fi
+
+    pkill -x waybar 2>/dev/null || true
+}
+
+nova_is_running() {
+    qs list --all 2>/dev/null | awk '
+        /Config path:.*\/deblestia-nova\/shell\.qml/ { found = 1 }
+        END { exit !found }
+    '
+}
+
+# Laisser finir les autres exec-once, puis garder le shell Nova complet.
+sleep 2
+stop_legacy_panels
+
+# Certaines configurations KooL lancent leur profil un peu après les autres
+# applications de session. Un second passage ferme aussi leurs contrôleurs.
 (
     sleep 3
-    pkill -x waybar 2>/dev/null || true
+    stop_legacy_panels
 ) &
-
-if command -v caelestia >/dev/null 2>&1; then
-    caelestia shell -k 2>/dev/null || true
-elif [ -x "$HOME/.nix-profile/bin/caelestia" ]; then
-    "$HOME/.nix-profile/bin/caelestia" shell -k 2>/dev/null || true
-fi
 
 if ! command -v qs >/dev/null 2>&1; then
     command -v notify-send >/dev/null 2>&1 && notify-send \
@@ -25,4 +68,13 @@ if ! command -v qs >/dev/null 2>&1; then
     exit 1
 fi
 
-exec qs -d -c deblestia-nova
+# Quickshell peut conserver un démon de session même après la fermeture de sa
+# fenêtre. Réutiliser son instance Nova au lieu d'empiler une seconde barre.
+if ! nova_is_running; then
+    qs -n -d -c deblestia-nova
+fi
+
+# Une ancienne session peut avoir laissé la barre QML fermée.
+if command -v hyprctl >/dev/null 2>&1; then
+    hyprctl dispatch global quickshell:barOpen >/dev/null 2>&1 || true
+fi

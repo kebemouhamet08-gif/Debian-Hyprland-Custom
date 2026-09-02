@@ -52,9 +52,15 @@ window#waybar > box {
 #workspace-strip #custom-workspace3,
 #workspace-strip #custom-workspace4,
 #workspace-strip #custom-workspace5,
+#workspace-strip #custom-workspace6,
+#workspace-strip #custom-workspace7,
+#workspace-strip #custom-workspace8,
+#workspace-strip #custom-workspace9,
+#workspace-strip #custom-workspace10,
 #app-strip #custom-terminal,
 #app-strip #custom-files,
 #app-strip #custom-browser,
+#app-strip #custom-wallpaper,
 #session-strip #tray,
 #session-strip #custom-restore-minimized,
 #session-strip #custom-notifications,
@@ -104,13 +110,17 @@ window#waybar > box {
 }
 
 #custom-workspace1, #custom-workspace2, #custom-workspace3,
-#custom-workspace4, #custom-workspace5 {
+#custom-workspace4, #custom-workspace5, #custom-workspace6,
+#custom-workspace7, #custom-workspace8, #custom-workspace9,
+#custom-workspace10 {
   min-width: 18px;
 }
 
 #custom-workspace1.active, #custom-workspace2.active,
 #custom-workspace3.active, #custom-workspace4.active,
-#custom-workspace5.active {
+#custom-workspace5.active, #custom-workspace6.active,
+#custom-workspace7.active, #custom-workspace8.active,
+#custom-workspace9.active, #custom-workspace10.active {
   color: @text;
   background: rgba(226, 56, 100, 0.28);
   border: 1px solid @accent_soft;
@@ -149,9 +159,9 @@ window#waybar > box {
   padding: 8px 5px;
 }
 #custom-wallpaper {
-  color: #ff708f;
-  border-color: @accent_soft;
-  padding: 7px 13px;
+  color: @muted;
+  border-color: transparent;
+  padding: 8px 5px;
 }
 #temperature.critical, #battery.critical { color: #ff4d6d; }
 #battery.charging { color: #8bd49c; }

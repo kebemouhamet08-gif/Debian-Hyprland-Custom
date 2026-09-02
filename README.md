@@ -142,6 +142,12 @@ fond dynamique et panneaux translucides. Elle est indépendante de
 Deblestia Bar : aucun composant ne remplace l'autre et l'utilisateur installe
 uniquement les expériences qu'il souhaite conserver.
 
+### Vidéo Debian Glass Immersive v2
+
+[![HYPRLAND + CELESTIA SHELL ON DEBIAN](https://img.youtube.com/vi/tgntfMrhgew/maxresdefault.jpg)](https://youtu.be/tgntfMrhgew)
+
+▶️ Voir la vidéo : https://youtu.be/tgntfMrhgew
+
 Deblestia Shell adopte aussi progressivement certains concepts de
 [HyDE](https://github.com/HyDE-Project/HyDE) : installation modulaire, thèmes
 interchangeables, couleurs dynamiques, sélecteurs et profils. Leur adaptation à
@@ -322,6 +328,10 @@ ne la fournit pas, suivez la procédure de compilation du
    thème** : le réglage est conservé dans la session et utilisé par les
    applications compatibles. MPVpaper Engine synchronise `gsettings` et les
    configurations GTK 3/4 afin d'éviter qu'un ancien réglage remplace le choix.
+   Le bouton **󰸉 Adapter tout au fond choisi** analyse plusieurs scènes rendues
+   de la vidéo sélectionnée et envoie leur palette équilibrée à Deblestia Nova/Matugen ainsi qu'à
+   toutes les Waybar. Il adapte donc le shell et les applications compatibles
+   sans remplacer, interrompre ni masquer le fond animé.
    Les nouvelles collections peuvent être installées
    dans `~/.themes` pour GTK et `~/.icons` pour les icônes ou curseurs ; elles
    apparaîtront dans les listes au prochain lancement de MPVpaper Engine.
@@ -377,8 +387,9 @@ fond peut être restauré automatiquement à l'ouverture de la session Hyprland.
 Chaque écran peut conserver un fond et des réglages différents : appliquer un fond
 à `eDP-1` ne redémarre plus celui de `HDMI-A-1`. Le choix **Tous les écrans** remplace
 volontairement les affectations individuelles par un fond commun.
-Sur toutes les configurations Waybar fournies, un clic droit sur le module de fond
-d'écran choisit une vidéo aléatoire en conservant les réglages MPVpaper actifs.
+Toutes les configurations Waybar fournies affichent une icône MPVpaper discrète
+dans leur groupe d'applications. Le clic gauche ouvre ou ferme le moteur, le clic
+droit choisit une vidéo aléatoire et le clic milieu ouvre les réglages de couleurs.
 Le raccourci `Super+W` reste réservé au sélecteur standard de fonds d'écran fixes.
 Le bouton **Utiliser pour l'écran de connexion** extrait une image de la vidéo
 sélectionnée, ouvre un terminal d'autorisation et l'installe dans le thème SDDM
@@ -458,6 +469,14 @@ et trays existants tant que l'utilisateur ne choisit pas de les arrêter. Le
 verrouillage `Super+L` utilise Hyprlock installé par Debian afin d'éviter les
 incompatibilités PAM déjà rencontrées.
 
+L'installation désactive l'ancien `caelestia-v2.conf` et ajoute le profil
+`[Deblestia] Nova` au sélecteur des barres. Ce profil active exclusivement le
+shell Quickshell complet : barre supérieure avec lecteur, horloge analogique sur
+le bureau et dock/menu d'applications permanent en bas. Choisir une autre Waybar
+arrête ensemble ces trois éléments Nova avant de lancer la barre sélectionnée ;
+`no panel` arrête les deux systèmes. La restauration remet la configuration
+Hyprland sauvegardée.
+
 ### Installation copier-coller sur Debian
 
 Quickshell (`qs`) doit déjà être fonctionnel. Les paquets ci-dessous couvrent les
@@ -495,17 +514,36 @@ Raccourcis principaux : `Super+Espace` recherche, `Super+Échap` réglages,
 `Super+N` panneau droit, `Super+Maj+N` panneau gauche, `Super+Maj+W` fonds
 d'écran, `Super+Maj+B` barre et `Ctrl+Alt+Suppr` session.
 
+L'icône de fond animé de la barre Nova représente directement MPVpaper Engine :
+clic gauche pour ouvrir ou fermer le moteur, clic droit pour appliquer une vidéo
+aléatoire et clic milieu pour ouvrir les réglages de couleurs. Le sélecteur
+d'images fixes reste disponible avec `Super+Maj+W` et contient également une
+icône vidéo dédiée.
+
+Navigation entre bureaux : faites défiler la molette sur les boutons de bureaux
+de Waybar, ou glissez horizontalement avec trois doigts sur le pavé tactile.
+Ces gestes suivent les bureaux du moniteur actif. Les bureaux 1 à 10 sont déclarés
+persistants afin que le geste puisse atteindre les bureaux vides jusqu'au dixième.
+Dans la barre Nova, un clic gauche sur chaque numéro ouvre directement le bureau
+correspondant ; le backend utilise les commandes IPC compatibles avec Hyprland 0.53.
+
+Les profils Waybar fournis synchronisent également leur fond, leur accent et leur
+texte avec la palette Wallust du fond d'écran courant via
+`WaybarWallpaperSync.sh`.
+
 ## Deblestia Nova Lite — Waybar en îlots
 
-Deblestia Nova Lite est une configuration Waybar inspirée de l'organisation
-visuelle de Caelestia : plusieurs capsules translucides flottent en haut de
-l'écran et regroupent les fonctions par contexte. Elle ne remplace pas la barre
-verticale Deblestia Bar.
+Deblestia Nova Lite est une barre Waybar horizontale qui reprend l'organisation
+de la barre Nova/Quickshell. Elle utilise une palette sombre et neutre, sans ombre
+colorée, rail latéral ni barre inférieure. Le profil apparaît sous le nom
+`[Deblestia] Nova Lite`. Comme toute autre Waybar, sa sélection arrête complètement
+le shell Nova afin d'éviter les doubles barres et les réservations invisibles.
 
-Son rendu expressif combine désormais une barre supérieure segmentée et colorée,
-un rail d'actions flottant à gauche et le bouton de fond d'écran inférieur. Cette
-composition adapte les principes Material et les panneaux modulaires observés
-dans end4-pC au format Waybar, tout en conservant les outils Debian de Deblestia.
+Le profil `[CUSTOM] Debian Glass` utilise lui aussi une disposition supérieure
+complète et conserve ses fonctions historiques : lecteur, applications, bureaux,
+restauration des fenêtres réduites, météo, état système et contrôles de session.
+Son lecteur central adopte une capsule inspirée de Spotify avec visualisation
+audio CAVA, métadonnées MPRIS et commandes précédent, lecture/pause et suivant.
 
 Nova Lite est le profil Waybar sélectionné par défaut par `install.sh`. Deblestia Bar
 reste disponible avec `install-deblestia-bar.sh` ou avec le sélecteur de profil.
@@ -523,7 +561,7 @@ Fonctions supplémentaires de Nova Lite :
 - notifications, veille, mises à jour APT, tray et panneau d'alimentation ;
 - centre Focus inspiré de l'approche modulaire d'end4-pC : Pomodoro persistant,
   pauses courtes/longues et notes locales ;
-- accès permanent à MPVpaper Engine dans le coin inférieur droit.
+- accès direct et discret à MPVpaper Engine dans le groupe des lanceurs.
 
 Les commandes enrichies utilisent, lorsqu'elles sont installées, `brightnessctl`,
 `cliphist`, `grim`, `hyprpicker`, `powerprofilesctl`, `slurp`, `swaync-client` et
@@ -564,6 +602,7 @@ Une surcouche réutilisable pour les dotfiles
 - lecteur multimédia compact adapté à la barre latérale ;
 - commandes précédent, lecture/pause et suivant ;
 - panneau multimédia GTK avec volume et sortie audio ;
+- raccourci MPVpaper intégré à la barre principale, sans barre flottante séparée ;
 - couleurs pilotées par `panel-colors.css`.
 
 ### Installation

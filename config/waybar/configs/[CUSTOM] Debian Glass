@@ -1,0 +1,317 @@
+[
+  {
+    "include": [
+      "$HOME/.config/waybar/ModulesWorkspaces",
+      "$HOME/.config/waybar/Modules",
+      "$HOME/.config/waybar/ModulesCustom"
+    ],
+    "layer": "top",
+    "position": "top",
+    "exclusive": true,
+    "fixed-center": false,
+    "ipc": true,
+    "spacing": 6,
+    "margin-top": 7,
+    "margin-left": 10,
+    "modules-left": [
+      "custom/debian-menu",
+      "hyprland/workspaces",
+      "group/app-strip",
+      "custom/active-window"
+    ],
+    "modules-center": [
+      "group/media-player"
+    ],
+    "modules-right": [
+      "custom/weather",
+      "group/hardware-strip",
+      "group/connectivity-strip",
+      "group/session-strip",
+      "clock"
+    ],
+    "group/hardware-strip": {
+      "orientation": "inherit",
+      "modules": [
+        "cpu",
+        "memory",
+        "temperature",
+        "disk"
+      ]
+    },
+    "group/connectivity-strip": {
+      "orientation": "inherit",
+      "modules": [
+        "network",
+        "bluetooth",
+        "battery"
+      ]
+    },
+    "group/workspace-strip": {
+      "orientation": "inherit",
+      "modules": [
+        "custom/workspace1",
+        "custom/workspace2",
+        "custom/workspace3",
+        "custom/workspace4",
+        "custom/workspace5"
+      ]
+    },
+    "group/app-strip": {
+      "orientation": "inherit",
+      "modules": [
+        "custom/terminal",
+        "custom/files",
+        "custom/browser",
+        "custom/mpvpaper"
+      ]
+    },
+    "group/media-player": {
+      "orientation": "inherit",
+      "modules": [
+        "custom/cava_mviz",
+        "custom/media-previous",
+        "mpris",
+        "custom/media-play-pause",
+        "custom/media-next"
+      ]
+    },
+    "group/session-strip": {
+      "orientation": "inherit",
+      "modules": [
+        "tray",
+        "custom/restore-minimized",
+        "custom/notifications",
+        "custom/overview",
+        "custom/power"
+      ]
+    },
+    "custom/debian-menu": {
+      "format": "",
+      "tooltip-format": "Applications",
+      "on-click": "pkill rofi || rofi -show drun -theme $HOME/.config/rofi/DebianGlass.rasi",
+      "on-click-right": "$HOME/.config/hypr/scripts/WaybarLayout.sh"
+    },
+    "hyprland/workspaces": {
+      "format": "{name}",
+      "on-click": "activate",
+      "on-scroll-up": "hyprctl dispatch workspace -1",
+      "on-scroll-down": "hyprctl dispatch workspace +1",
+      "persistent-workspaces": {
+        "*": 10
+      },
+      "sort-by-number": true
+    },
+    "custom/active-window": {
+      "exec": "hyprctl activewindow -j | jq -r '.title // empty'",
+      "interval": 1,
+      "format": "  {}",
+      "max-length": 32,
+      "min-length": 24,
+      "align": 0.0,
+      "justify": "left",
+      "tooltip": false,
+      "hide-empty-text": true
+    },
+    "hyprland/workspaces#rw": {
+      "format": "{windows}",
+      "format-window-separator": " ",
+      "window-rewrite-default": " ",
+      "window-rewrite": {
+        "class<firefox|firefox-esr|org.mozilla.firefox>": " ",
+        "class<code|Code|code-url-handler>": "󰨞 ",
+        "class<kitty|Alacritty|org.wezfurlong.wezterm>": " ",
+        "class<thunar|org.gnome.Nautilus|dolphin>": " ",
+        "class<discord|vesktop|Vesktop>": " ",
+        "class<spotify|Spotify>": " ",
+        "class<steam|Steam>": " "
+      }
+    },
+    "custom/workspace1": {
+      "exec": "$HOME/.config/waybar/workspace-label.sh 1",
+      "return-type": "json",
+      "interval": 1,
+      "on-click": "hyprctl dispatch workspace 1"
+    },
+    "custom/workspace2": {
+      "exec": "$HOME/.config/waybar/workspace-label.sh 2",
+      "return-type": "json",
+      "interval": 1,
+      "on-click": "hyprctl dispatch workspace 2"
+    },
+    "custom/workspace3": {
+      "exec": "$HOME/.config/waybar/workspace-label.sh 3",
+      "return-type": "json",
+      "interval": 1,
+      "on-click": "hyprctl dispatch workspace 3"
+    },
+    "custom/workspace4": {
+      "exec": "$HOME/.config/waybar/workspace-label.sh 4",
+      "return-type": "json",
+      "interval": 1,
+      "on-click": "hyprctl dispatch workspace 4"
+    },
+    "custom/workspace5": {
+      "exec": "$HOME/.config/waybar/workspace-label.sh 5",
+      "return-type": "json",
+      "interval": 1,
+      "on-click": "hyprctl dispatch workspace 5"
+    },
+    "custom/terminal": {
+      "format": "",
+      "tooltip-format": "Clic gauche : terminal simple\nClic droit : dashboard plein écran",
+      "on-click": "kitty",
+      "on-click-right": "$HOME/.config/kitty/open-fullscreen-dashboard.sh"
+    },
+    "custom/files": {
+      "format": "",
+      "tooltip-format": "Fichiers",
+      "on-click": "thunar"
+    },
+    "custom/browser": {
+      "format": "",
+      "tooltip-format": "Firefox",
+      "on-click": "firefox"
+    },
+    "custom/mpvpaper": {
+      "format": "󰸉",
+      "tooltip-format": "MPVpaper Engine\nClic gauche : ouvrir/fermer\nClic droit : fond vidéo aléatoire\nClic milieu : réglages des couleurs",
+      "on-click": "$HOME/.local/bin/mpvpaper-engine-toggle",
+      "on-click-right": "$HOME/.local/bin/mpvpaper-enginectl random",
+      "on-click-middle": "$HOME/.local/bin/mpvpaper-engine --colors"
+    },
+    "clock": {
+      "interval": 1,
+      "format": "{:%a %d  ·  %H:%M}",
+      "format-alt": "{:%A %d %B %Y   %H:%M:%S}",
+      "tooltip-format": "<big>{:%B %Y}</big>\n<tt><small>{calendar}</small></tt>"
+    },
+    "mpris": {
+      "interval": 1,
+      "format": "{player_icon}  {dynamic}",
+      "format-paused": "{status_icon}  {dynamic}",
+      "dynamic-order": [
+        "artist",
+        "title"
+      ],
+      "dynamic-len": 32,
+      "min-length": 22,
+      "align": 0.5,
+      "justify": "center",
+      "on-click": "$HOME/.config/waybar/media-panel-toggle.sh",
+      "on-click-middle": "playerctl play-pause",
+      "on-click-right": "playerctl next",
+      "tooltip-format": "{player_icon} {artist} — {title}\nClic gauche : panneau · milieu : pause · droit : suivant",
+      "player-icons": {
+        "default": "",
+        "firefox": "",
+        "chromium": "",
+        "spotify": "",
+        "vlc": "󰕼"
+      },
+      "status-icons": {
+        "paused": "󰐎",
+        "playing": "",
+        "stopped": ""
+      }
+    },
+    "custom/media-previous": {
+      "format": "󰒮",
+      "tooltip-format": "Titre précédent",
+      "on-click": "playerctl previous"
+    },
+    "custom/media-play-pause": {
+      "exec": "sh -c 'case $(playerctl status 2>/dev/null) in Playing) printf 󰏤;; Paused) printf 󰐊;; *) printf 󰐊;; esac'",
+      "interval": 1,
+      "tooltip-format": "Lecture / pause",
+      "on-click": "playerctl play-pause"
+    },
+    "custom/media-next": {
+      "format": "󰒭",
+      "tooltip-format": "Titre suivant",
+      "on-click": "playerctl next"
+    },
+    "custom/weather": {
+      "format": "{}",
+      "exec": "$HOME/.config/hypr/UserScripts/Weather.sh",
+      "return-type": "json",
+      "interval": 900
+    },
+    "cpu": {
+      "interval": 2,
+      "format": "  {usage}%",
+      "on-click": "$HOME/.config/waybar/debian-glass-stats.sh"
+    },
+    "memory": {
+      "interval": 5,
+      "format": "  {percentage}%",
+      "on-click": "$HOME/.config/waybar/debian-glass-stats.sh"
+    },
+    "temperature": {
+      "interval": 5,
+      "format": " {temperatureC}°C",
+      "critical-threshold": 85
+    },
+    "disk": {
+      "interval": 30,
+      "path": "/",
+      "format": "󰋊 {percentage_used}%"
+    },
+    "network": {
+      "interval": 2,
+      "format-wifi": "",
+      "format-ethernet": "󰈀",
+      "format-disconnected": "󰖪",
+      "tooltip-format-wifi": "{essid}\n↓ {bandwidthDownBytes}  ↑ {bandwidthUpBytes}",
+      "tooltip-format-ethernet": "{ifname}\n↓ {bandwidthDownBytes}  ↑ {bandwidthUpBytes}"
+    },
+    "bluetooth": {
+      "format": "",
+      "format-connected": "",
+      "format-disabled": "",
+      "tooltip-format": "Bluetooth : {status}"
+    },
+    "battery": {
+      "states": {
+        "warning": 30,
+        "critical": 15
+      },
+      "format": "{icon}",
+      "format-charging": "",
+      "format-icons": [
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "tooltip-format": "Batterie {capacity}%\nClic : choisir le profil énergie",
+      "on-click": "$HOME/.config/waybar/power-profile-menu.sh"
+    },
+    "tray": {
+      "spacing": 8
+    },
+    "custom/restore-minimized": {
+      "format": "󰍔",
+      "tooltip": true,
+      "tooltip-format": "Restaurer la dernière fenêtre minimisée",
+      "on-click": "$HOME/.config/hypr/UserScripts/RestoreMinimizedWindow.sh"
+    },
+    "custom/notifications": {
+      "format": "",
+      "on-click": "swaync-client -t -sw",
+      "on-click-right": "swaync-client -d -sw"
+    },
+    "custom/overview": {
+      "format": "󰍹",
+      "tooltip-format": "Panneau système",
+      "on-click": "$HOME/.config/waybar/debian-glass-stats.sh"
+    },
+    "custom/power": {
+      "format": "",
+      "on-click": "$HOME/.config/hypr/scripts/Wlogout.sh"
+    },
+    "name": "custom-debian-glass-top",
+    "height": 44,
+    "margin-right": 10
+  }
+]

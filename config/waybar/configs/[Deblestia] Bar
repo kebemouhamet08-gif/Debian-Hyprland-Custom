@@ -37,12 +37,14 @@
     "orientation": "inherit",
     "modules": [
       "custom/workspace1", "custom/workspace2", "custom/workspace3",
-      "custom/workspace4", "custom/workspace5"
+      "custom/workspace4", "custom/workspace5", "custom/workspace6",
+      "custom/workspace7", "custom/workspace8", "custom/workspace9",
+      "custom/workspace10"
     ]
   },
   "group/app-strip": {
     "orientation": "inherit",
-    "modules": ["custom/terminal", "custom/files", "custom/browser"]
+    "modules": ["custom/terminal", "custom/files", "custom/browser", "custom/wallpaper"]
   },
   "group/media-player": {
     "orientation": "inherit",
@@ -85,11 +87,16 @@
       "class<steam|Steam>": " "
     }
   },
-  "custom/workspace1": {"exec": "$HOME/.config/waybar/workspace-label.sh 1", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 1"},
-  "custom/workspace2": {"exec": "$HOME/.config/waybar/workspace-label.sh 2", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 2"},
-  "custom/workspace3": {"exec": "$HOME/.config/waybar/workspace-label.sh 3", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 3"},
-  "custom/workspace4": {"exec": "$HOME/.config/waybar/workspace-label.sh 4", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 4"},
-  "custom/workspace5": {"exec": "$HOME/.config/waybar/workspace-label.sh 5", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 5"},
+  "custom/workspace1": {"exec": "$HOME/.config/waybar/workspace-label.sh 1", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 1", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace2": {"exec": "$HOME/.config/waybar/workspace-label.sh 2", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 2", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace3": {"exec": "$HOME/.config/waybar/workspace-label.sh 3", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 3", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace4": {"exec": "$HOME/.config/waybar/workspace-label.sh 4", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 4", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace5": {"exec": "$HOME/.config/waybar/workspace-label.sh 5", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 5", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace6": {"exec": "$HOME/.config/waybar/workspace-label.sh 6", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 6", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace7": {"exec": "$HOME/.config/waybar/workspace-label.sh 7", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 7", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace8": {"exec": "$HOME/.config/waybar/workspace-label.sh 8", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 8", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace9": {"exec": "$HOME/.config/waybar/workspace-label.sh 9", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 9", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
+  "custom/workspace10": {"exec": "$HOME/.config/waybar/workspace-label.sh 10", "return-type": "json", "interval": 1, "on-click": "hyprctl dispatch workspace 10", "on-scroll-up": "hyprctl dispatch workspace -1", "on-scroll-down": "hyprctl dispatch workspace +1"},
   "custom/terminal": {
     "format": "",
     "tooltip-format": "Clic gauche : terminal simple\nClic droit : dashboard plein écran",
@@ -98,6 +105,14 @@
   },
   "custom/files": {"format": "", "tooltip-format": "Fichiers", "on-click": "thunar"},
   "custom/browser": {"format": "", "tooltip-format": "Firefox", "on-click": "firefox"},
+  "custom/wallpaper": {
+    "format": "󰸉",
+    "tooltip": true,
+    "tooltip-format": "MPVpaper Engine\nClic gauche : ouvrir/fermer\nClic droit : fond vidéo aléatoire\nClic milieu : couleurs",
+    "on-click": "$HOME/.local/bin/mpvpaper-engine-toggle",
+    "on-click-right": "$HOME/.local/bin/mpvpaper-enginectl random",
+    "on-click-middle": "$HOME/.local/bin/mpvpaper-engine --colors"
+  },
   "clock": {
     "interval": 1,
     "format": "{:%H\n%M}",
@@ -183,23 +198,5 @@
     "on-click": "$HOME/.config/waybar/deblestia-bar-stats.sh"
   },
   "custom/power": {"format": "", "on-click": "$HOME/.config/hypr/scripts/Wlogout.sh"}
-},
-{
-  "name": "wallpaper-corner",
-  "layer": "top",
-  "position": "bottom",
-  "height": 44,
-  "exclusive": false,
-  "passthrough": false,
-  "margin-bottom": 12,
-  "margin-right": 12,
-  "modules-right": ["custom/wallpaper"],
-  "custom/wallpaper": {
-    "format": "󰸉  Fond d’écran",
-    "tooltip": true,
-    "tooltip-format": "Clic gauche : fonds vidéo MPVpaper\nClic droit : fond vidéo aléatoire",
-    "on-click": "$HOME/.local/bin/mpvpaper-engine-toggle",
-    "on-click-right": "$HOME/.local/bin/mpvpaper-enginectl random"
-  }
 }
 ]

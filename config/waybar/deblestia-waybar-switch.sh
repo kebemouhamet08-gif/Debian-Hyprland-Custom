@@ -7,7 +7,7 @@ variant="${1:-}"
 
 if [ -z "$variant" ]; then
     variant="$(
-        printf '%s\n' 'Nova · îlots horizontaux' 'Bar · barre verticale' |
+        printf '%s\n' 'Nova Lite · îlots horizontaux' 'Bar · barre verticale' |
             rofi -dmenu -i -p 'Variante Deblestia' \
                 -theme "$HOME/.config/rofi/DebianGlass.rasi"
     )"
@@ -15,8 +15,8 @@ fi
 
 case "$variant" in
     nova|Nova*)
-        config_name='[Deblestia] Nova'
-        style_name='[Deblestia] Nova.css'
+        config_name='[Deblestia] Nova Lite'
+        style_name='[Deblestia] Nova Lite.css'
         ;;
     bar|Bar*)
         config_name='[Deblestia] Bar'
@@ -31,5 +31,5 @@ esac
 
 ln -sfn "$waybar_dir/configs/$config_name" "$waybar_dir/config"
 ln -sfn "$waybar_dir/styles/$style_name" "$waybar_dir/style.css"
-pkill -SIGUSR2 -x waybar 2>/dev/null || true
+"$HOME/.config/hypr/scripts/desktop-shell-mode.sh" "$config_name" &
 notify-send "Deblestia" "$config_name activé"

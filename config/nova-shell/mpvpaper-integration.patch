@@ -1,0 +1,86 @@
+diff --git a/modules/ii/bar/UtilButton.qml b/modules/ii/bar/UtilButton.qml
+index a5cf86e..dedd28e 100644
+--- a/modules/ii/bar/UtilButton.qml
++++ b/modules/ii/bar/UtilButton.qml
+@@ -11,6 +11,8 @@ Item {
+     property alias iconText: symbol.text
+     property bool isActive: false
+     property bool forceHovered: false
++    property var altAction
++    property var middleClickAction
+ 
+     implicitWidth: vertical ? 26 : (hovered ? 54 : 26)
+     implicitHeight: vertical ? (hovered ? 54 : 26) : 26
+@@ -59,6 +61,15 @@ Item {
+         id: mouseArea
+         anchors.fill: parent
+         hoverEnabled: true
+-        onClicked: (e) => root.clicked(e)
++        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
++        onClicked: (e) => {
++            if (e.button === Qt.RightButton) {
++                if (root.altAction) root.altAction(e)
++            } else if (e.button === Qt.MiddleButton) {
++                if (root.middleClickAction) root.middleClickAction(e)
++            } else {
++                root.clicked(e)
++            }
++        }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/modules/ii/bar/UtilButtons.qml b/modules/ii/bar/UtilButtons.qml
+--- a/modules/ii/bar/UtilButtons.qml
++++ b/modules/ii/bar/UtilButtons.qml
+@@ -190,17 +190,21 @@ Item {
+         Component {
+             id: wallpaperM3
+             UtilButton {
+-                iconText: "imagesmode"
+-                onClicked: GlobalStates.wallpaperSelectorOpen = !GlobalStates.wallpaperSelectorOpen
++                iconText: "animated_images"
++                onClicked: Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine-toggle`])
++                altAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-enginectl`, "random"])
++                middleClickAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine`, "--colors"])
+             }
+         }
+         Component {
+             id: legacyWallpaper
+             CircleUtilButton {
+-                onClicked: GlobalStates.wallpaperSelectorOpen = !GlobalStates.wallpaperSelectorOpen
++                onClicked: Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine-toggle`])
++                altAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-enginectl`, "random"])
++                middleClickAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine`, "--colors"])
+                 MaterialSymbol {
+                     horizontalAlignment: Qt.AlignHCenter
+-                    fill: 0; text: "imagesmode"
++                    fill: 0; text: "animated_images"
+                     iconSize: Appearance.font.pixelSize.large
+                     color: Appearance.colors.colOnLayer2
+                 }
+diff --git a/modules/ii/wallpaperSelector/WallpaperSelectorContent.qml b/modules/ii/wallpaperSelector/WallpaperSelectorContent.qml
+--- a/modules/ii/wallpaperSelector/WallpaperSelectorContent.qml
++++ b/modules/ii/wallpaperSelector/WallpaperSelectorContent.qml
+@@ -447,6 +447,21 @@ MouseArea {
+                                         text: Translation.tr("Use the system file picker instead\nRight-click to make this the default behavior")
+                                     }
+                                 }
++                                IconToolbarButton {
++                                    implicitWidth: height
++                                    onClicked: {
++                                        Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine-toggle`]);
++                                        GlobalStates.wallpaperSelectorOpen = false;
++                                    }
++                                    altAction: () => {
++                                        Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-enginectl`, "random"]);
++                                        GlobalStates.wallpaperSelectorOpen = false;
++                                    }
++                                    text: "animated_images"
++                                    StyledToolTip {
++                                        text: Translation.tr("MPVpaper Engine\nRight-click for a random video wallpaper")
++                                    }
++                                }
+                                 IconToolbarButton {
+                                     implicitWidth: height
+                                     onClicked: Wallpapers.randomFromCurrentFolder()

@@ -148,6 +148,62 @@ class ColorEngineTests(unittest.TestCase):
         self.assertIn("colortemperature=temperature=4500", value)
         self.assertIn("rm=0.12", value)
 
+    def test_palette_capture_samples_four_video_scenes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory)
+            video = runtime / "wallpaper.mp4"
+            video.write_bytes(b"video")
+            commands = []
+
+            def fake_run(command, **_options):
+                commands.append(command)
+                if command[0] == "ffprobe":
+                    return mock.Mock(returncode=0, stdout="20.0\n", stderr="")
+                Path(command[-1]).write_bytes(b"png")
+                return mock.Mock(returncode=0, stdout="", stderr="")
+
+            with mock.patch.object(CONTROLLER, "RUNTIME_DIR", runtime), \
+                    mock.patch.object(CONTROLLER.subprocess, "run", side_effect=fake_run):
+                capture = CONTROLLER.capture_palette_source(
+                    video, "DP-1", CONTROLLER.DEFAULT_CONFIG
+                )
+
+        ffmpeg = commands[1]
+        self.assertEqual(ffmpeg.count("-i"), 4)
+        self.assertIn("xstack=inputs=4", ffmpeg[ffmpeg.index("-filter_complex") + 1])
+        self.assertEqual(capture.name, "DP-1-theme.png")
+
+    def test_adapt_theme_uses_video_frame_without_switching_wallpaper(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config_home = root / "config"
+            nova = config_home / "quickshell/deblestia-nova/scripts/colors/switchwall.sh"
+            waybar = config_home / "hypr/UserScripts/WaybarWallpaperSync.sh"
+            nova.parent.mkdir(parents=True)
+            waybar.parent.mkdir(parents=True)
+            nova.touch()
+            waybar.touch()
+            frame = root / "frame.png"
+            frame.write_bytes(b"png")
+            calls = []
+
+            def fake_run(command, **_options):
+                calls.append(command)
+                return mock.Mock(returncode=0, stdout="", stderr="")
+
+            with mock.patch.dict("os.environ", {"XDG_CONFIG_HOME": str(config_home)}), \
+                    mock.patch.object(CONTROLLER, "capture_palette_source", return_value=frame), \
+                    mock.patch.object(CONTROLLER.subprocess, "run", side_effect=fake_run):
+                result_frame, targets = CONTROLLER.adapt_desktop_theme(
+                    "DP-1", CONTROLLER.DEFAULT_CONFIG, root / "wallpaper.mp4"
+                )
+
+        self.assertEqual(result_frame, frame)
+        self.assertEqual(targets, ["Nova et applications", "Waybar"])
+        self.assertIn("--noswitch", calls[0])
+        self.assertIn("--image", calls[0])
+        self.assertIn("--wallpaper", calls[1])
+
 
 if __name__ == "__main__":
     unittest.main()

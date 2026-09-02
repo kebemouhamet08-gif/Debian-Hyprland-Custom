@@ -3,7 +3,11 @@
 Ce dépôt regroupe plusieurs composants indépendants. Ils sont présentés par leur
 nom dans ce guide : **Deblestia Bar**, **Deblestia Nova**, **Deblestia Nova Lite**, **Deblestia Shell**,
 **MPVpaper Engine**, **PeriphX** et **MirrorBridge**. Les commandes historiques restent disponibles
-comme alias techniques afin de préserver les installations existantes.
+comme alias techniques afin de préserver les installations existantes
+
+## 🎥 Video Demo
+
+[![Watch the video](https://img.youtube.com/vi/tgntfMrhgew/hqdefault.jpg)](https://youtu.be/tgntfMrhgew)
 
 ## Installation guidée
 

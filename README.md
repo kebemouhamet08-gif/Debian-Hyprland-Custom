@@ -142,6 +142,12 @@ fond dynamique et panneaux translucides. Elle est indépendante de
 Deblestia Bar : aucun composant ne remplace l'autre et l'utilisateur installe
 uniquement les expériences qu'il souhaite conserver.
 
+### Vidéo Debian Glass Immersive v2
+
+[![HYPRLAND + CELESTIA SHELL ON DEBIAN](https://img.youtube.com/vi/tgntfMrhgew/maxresdefault.jpg)](https://youtu.be/tgntfMrhgew)
+
+▶️ Voir la vidéo : https://youtu.be/tgntfMrhgew
+
 Deblestia Shell adopte aussi progressivement certains concepts de
 [HyDE](https://github.com/HyDE-Project/HyDE) : installation modulaire, thèmes
 interchangeables, couleurs dynamiques, sélecteurs et profils. Leur adaptation à

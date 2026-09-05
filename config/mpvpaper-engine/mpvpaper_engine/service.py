@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import signal
 import threading
+import time
 from typing import Any, Callable
 
 from .config import EngineConfig, load_config, validate_output_name
@@ -98,8 +99,22 @@ class EngineService:
             "set_color": self._set_color,
             "set_performance_profile": self._set_performance_profile,
             "get_playback_state": self._get_playback_state,
+            "configure_hud": self._configure_hud,
             "refresh_hud": self._refresh_hud,
         }
+
+    def _configure_hud(self, params):
+        if set(params) != {"settings"} or not isinstance(params["settings"], dict):
+            raise RPCError("invalid_params", "HUD settings must be an object")
+        settings = params["settings"]
+        self._invoke(self.playback.configure_hud, settings)
+        self.config.ui["hud"] = settings
+        for output in list(self.state.snapshot().outputs):
+            try:
+                self.playback.refresh_hud(output)
+            except PlaybackError:
+                LOGGER.debug("HUD refresh failed for %s", output, exc_info=True)
+        return {"configured": True}
 
     def _refresh_hud(self, params):
         output = self._output(params)
@@ -250,12 +265,17 @@ class EngineService:
         self._hud_thread.start()
 
     def _hud_loop(self):
-        while not self._stop_event.wait(60):
+        while not self._stop_event.wait(self._seconds_to_next_minute()):
             for output in list(self.state.snapshot().outputs):
                 try:
                     self.playback.refresh_hud(output)
                 except Exception:
                     LOGGER.debug("HUD refresh failed for %s", output, exc_info=True)
+
+    @staticmethod
+    def _seconds_to_next_minute() -> float:
+        now = time.time()
+        return max(0.1, 60.0 - (now % 60.0))
 
     def _reconcile_running_outputs(self) -> None:
         """Reconstruct state once when wallpapers predate the Engine service."""

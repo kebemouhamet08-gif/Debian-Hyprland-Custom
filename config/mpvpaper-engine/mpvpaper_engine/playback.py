@@ -191,6 +191,7 @@ class PlaybackController:
             self.state.update_output(output, **changes)
 
     def _mpv_options(self, output: str, profile: dict[str, Any]) -> str:
+        self.paths.mpv_socket_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
         socket_path = self.paths.mpv_socket(output)
         options = [
             "load-scripts=no", "terminal=no",
@@ -205,7 +206,10 @@ class PlaybackController:
         ]
         hud_file = self.hud.render(output)
         if hud_file is not None:
-            options.extend([f"sub-files={hud_file}", "sub-auto=no"])
+            options.extend([
+                f"sub-file={hud_file}", "sub-auto=no", "sid=1",
+                "sub-visibility=yes", "osd-level=1",
+            ])
         if profile.get("loop", True):
             options.append("loop-file=inf")
         performance = effective_settings(profile.get("performance_profile", "auto"))
@@ -261,8 +265,10 @@ class PlaybackController:
     def _apply_hud(self, client: MpvClient, output: str) -> None:
         hud_file = self.hud.render(output)
         if hud_file is None:
+            self._remove_hud(client)
             return
-        client.set_property("sub-files", [str(hud_file)])
+        self._load_hud_subtitle(client, hud_file)
+        client.set_property("sub-visibility", True)
         if hasattr(client, "command"):
             try:
                 client.command("sub-reload")
@@ -272,15 +278,41 @@ class PlaybackController:
     def refresh_hud(self, output: str) -> bool:
         hud_file = self.hud.render(output)
         if hud_file is None:
+            self._remove_hud(self._client(output))
             return False
         client = self._client(output)
-        client.set_property("sub-files", [str(hud_file)])
+        self._load_hud_subtitle(client, hud_file)
+        client.set_property("sub-visibility", True)
         if hasattr(client, "command"):
             try:
                 client.command("sub-reload")
             except PlaybackError:
                 return False
         return True
+
+    @staticmethod
+    def _remove_hud(client: MpvClient) -> None:
+        if not hasattr(client, "command"):
+            client.set_property("sub-visibility", False)
+            return
+        current_sid = client.get_property("sid")
+        if isinstance(current_sid, int):
+            client.command("sub-remove", current_sid)
+        client.set_property("sub-visibility", False)
+
+    @staticmethod
+    def _load_hud_subtitle(client: MpvClient, hud_file: Path) -> None:
+        if not hasattr(client, "command"):
+            client.set_property("sub-files", [str(hud_file)])
+            client.set_property("sid", 1)
+            return
+        current_sid = client.get_property("sid")
+        if isinstance(current_sid, int):
+            client.command("sub-remove", current_sid)
+        client.command("sub-add", str(hud_file), "select")
+
+    def configure_hud(self, settings: dict[str, Any]) -> None:
+        self.hud.configure(settings)
 
     def stop(self, output: str) -> None:
         self._validate_output(output)

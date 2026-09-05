@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import sys
 import tempfile
 import unittest
@@ -69,6 +70,24 @@ class GuiBackendTests(unittest.TestCase):
         self.backend.playback("profile", "DP-1", "eco")
         self.client.set_volume.assert_called_once_with("DP-1", 33)
         self.client.set_performance_profile.assert_called_once_with("DP-1", "eco")
+
+    def test_hud_settings_are_saved_and_sent_to_engine(self):
+        settings = {
+            "enabled": False,
+            "position": {"x": 0.25, "y": 0.4},
+            "scale": 1.2,
+            "opacity": 0.8,
+            "username": "テスト",
+            "elements": {"time": False},
+        }
+
+        self.backend.configure_hud(settings)
+
+        self.assertEqual(self.backend.hud_settings(), settings)
+        self.client.configure_hud.assert_called_once_with(settings)
+        self.assertEqual(
+            json.loads(self.paths.config_file.read_text())["ui"]["hud"], settings
+        )
 
     def test_pasted_url_is_sent_to_discovery_downloader(self):
         downloader = mock.Mock()

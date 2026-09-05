@@ -45,12 +45,12 @@ def settings_from_config(data: Any) -> HudSettings:
     )
 
 
-def _ass_color(value: str, fallback: str) -> str:
+def _ass_color(value: str, fallback: str, alpha: int = 0) -> str:
     match = re.fullmatch(r"#([0-9a-fA-F]{6})", value or "")
     if not match:
         value = fallback
     red, green, blue = (value[index:index + 2] for index in (1, 3, 5))
-    return f"&H00{blue}{green}{red}".upper()
+    return f"&H{alpha:02X}{blue}{green}{red}".upper()
 
 
 def _palette(path: Path) -> dict[str, str]:
@@ -65,8 +65,30 @@ def _palette(path: Path) -> dict[str, str]:
     return values
 
 
+def _monitor_size(output: str) -> tuple[int, int] | None:
+    try:
+        result = subprocess.run(
+            ["hyprctl", "-j", "monitors", "all"],
+            capture_output=True, text=True, timeout=3, check=False,
+        )
+        data = json.loads(result.stdout) if result.returncode == 0 else []
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return None
+    if not isinstance(data, list):
+        return None
+    candidates = [
+        item for item in data
+        if isinstance(item, dict) and (output == "*" or item.get("name") == output)
+    ]
+    for item in candidates:
+        width, height = item.get("width"), item.get("height")
+        if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+            return width, height
+    return None
+
+
 def make_ass(width: int, height: int, settings: HudSettings, palette: dict[str, str]) -> str:
-    now = datetime.now()
+    now = datetime.now().astimezone()
     greetings = ((5, 12, "GOOD MORNING", "おはよう"), (12, 18, "GOOD AFTERNOON", "こんにちは"))
     greeting_en, greeting_jp = "GOOD EVENING", "こんばんは"
     for start, end, english, japanese in greetings:
@@ -74,27 +96,42 @@ def make_ass(width: int, height: int, settings: HudSettings, palette: dict[str, 
             greeting_en, greeting_jp = english, japanese
             break
     x, y = int(width * settings.x), int(height * settings.y)
-    primary = _ass_color(palette["text"], "#FFFFFF")
-    secondary = _ass_color(palette["muted"], "#CCCCCC")
-    accent = _ass_color(palette["accent"], "#FF5577")
     alpha = max(0, min(255, round((1 - settings.opacity) * 255)))
+    primary = _ass_color(palette["text"], "#FFFFFF", alpha)
+    secondary = _ass_color(palette["muted"], "#CCCCCC", alpha)
+    accent = _ass_color(palette["accent"], "#FF5577", alpha)
+    sizes = {
+        "normal": round(42 * settings.scale),
+        "greeting": round(58 * settings.scale),
+        "day": round(56 * settings.scale),
+        "japanese": round(28 * settings.scale),
+        "username": round(22 * settings.scale),
+        "lines": round(38 * settings.scale),
+    }
+    gap = lambda value: round(value * settings.scale)
     events = []
     if settings.decorative_lines:
-        events.extend((("Lines", f"{{\\pos({x},{y - 150})}}│"), ("Lines", f"{{\\pos({x},{y - 105})}}│")))
+        events.extend((
+            ("Lines", f"{{\\pos({x},{y - gap(150)})}}│"),
+            ("Lines", f"{{\\pos({x},{y - gap(105)})}}│"),
+        ))
     if settings.greeting:
         events.append(("Greeting", f"{{\\pos({x},{y})}}{greeting_en}"))
     if settings.day:
-        events.append(("Anurati", f"{{\\pos({x},{y + 70})}}{now.strftime('%a').upper()}"))
+        events.append(("Anurati", f"{{\\pos({x},{y + gap(70)})}}{now.strftime('%a').upper()}"))
     if settings.time:
-        events.append(("Normal", f"{{\\pos({x},{y + 125})}}{now.strftime('%H:%M')}"))
+        events.append(("Normal", f"{{\\pos({x},{y + gap(125)})}}{now.strftime('%H:%M')}"))
     if settings.date:
-        events.append(("Normal", f"{{\\pos({x},{y + 175})}}{now.strftime('%d')}"))
+        events.append(("Normal", f"{{\\pos({x},{y + gap(175)})}}{now.strftime('%d')}"))
     if settings.japanese:
-        events.append(("Japanese", f"{{\\pos({x},{y + 225})}}{greeting_jp}"))
+        events.append(("Japanese", f"{{\\pos({x},{y + gap(225)})}}{greeting_jp}"))
     if settings.username:
-        events.append(("Username", f"{{\\pos({x},{y + 265})}}{settings.username}"))
+        events.append(("Username", f"{{\\pos({x},{y + gap(265)})}}{settings.username}"))
     if settings.decorative_lines:
-        events.extend((("Lines", f"{{\\pos({x},{y + 325})}}│"), ("Lines", f"{{\\pos({x},{y + 370})}}│")))
+        events.extend((
+            ("Lines", f"{{\\pos({x},{y + gap(325)})}}│"),
+            ("Lines", f"{{\\pos({x},{y + gap(370)})}}│"),
+        ))
     event_text = "\n".join(
         f"Dialogue: 0,0:00:00.00,9:59:59.00,{style},,0,0,0,,{text}"
         for style, text in events
@@ -107,12 +144,12 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
-Style: Normal,Noto Sans,42,{primary},{primary},&H00000000,&H{alpha:02X}000000,0,0,0,0,100,100,5,0,1,0,0,5,0,0,0,1
-Style: Greeting,Noto Sans,58,{primary},{primary},&H00000000,&H{alpha:02X}000000,1,0,0,0,100,100,5,0,1,0,0,5,0,0,0,1
-Style: Anurati,Anurati,56,{accent},{accent},&H00000000,&H{alpha:02X}000000,0,0,0,0,100,100,8,0,1,0,0,5,0,0,0,1
-Style: Japanese,Noto Sans CJK JP,28,{accent},{accent},&H00000000,&H{alpha:02X}000000,0,0,0,0,100,100,2,0,1,0,0,5,0,0,0,1
-Style: Username,Noto Sans CJK JP,22,{secondary},{secondary},&H00000000,&H{alpha:02X}000000,0,0,0,0,100,100,2,0,1,0,0,5,0,0,0,1
-Style: Lines,Noto Sans,38,{secondary},{secondary},&H00000000,&H{alpha:02X}000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
+Style: Normal,Noto Sans,{sizes["normal"]},{primary},{primary},&H00000000,&H00000000,0,0,0,0,100,100,5,0,1,0,0,5,0,0,0,1
+Style: Greeting,Noto Sans,{sizes["greeting"]},{primary},{primary},&H00000000,&H00000000,1,0,0,0,100,100,5,0,1,0,0,5,0,0,0,1
+Style: Anurati,Anurati,{sizes["day"]},{accent},{accent},&H00000000,&H00000000,0,0,0,0,100,100,8,0,1,0,0,5,0,0,0,1
+Style: Japanese,Noto Sans CJK JP,{sizes["japanese"]},{accent},{accent},&H00000000,&H00000000,0,0,0,0,100,100,2,0,1,0,0,5,0,0,0,1
+Style: Username,Noto Sans CJK JP,{sizes["username"]},{secondary},{secondary},&H00000000,&H00000000,0,0,0,0,100,100,2,0,1,0,0,5,0,0,0,1
+Style: Lines,Noto Sans,{sizes["lines"]},{secondary},{secondary},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 
 [Events]
 Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
@@ -135,9 +172,11 @@ class HudManager:
         safe = re.sub(r"[^A-Za-z0-9_.-]", "-", output)
         return self.directory / f"hud-{safe or 'all'}.ass"
 
-    def render(self, output: str, width: int = 1920, height: int = 1080) -> Path | None:
+    def render(self, output: str, width: int | None = None, height: int | None = None) -> Path | None:
         if not self.settings.enabled:
             return None
+        if width is None or height is None:
+            width, height = _monitor_size(output) or (1920, 1080)
         target = self.path(output)
         content = make_ass(width, height, self.settings, _palette(self.palette_file))
         temporary = target.with_suffix(".tmp")

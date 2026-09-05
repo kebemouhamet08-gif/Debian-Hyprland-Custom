@@ -313,3 +313,9 @@ class EngineClient:
 
     def get_playback_state(self, output: str) -> dict[str, Any]:
         return self.request("get_playback_state", {"output": output})
+
+    def configure_hud(self, settings: dict[str, Any]) -> dict[str, Any]:
+        return self.request("configure_hud", {"settings": settings})
+
+    def refresh_hud(self, output: str) -> dict[str, Any]:
+        return self.request("refresh_hud", {"output": output})

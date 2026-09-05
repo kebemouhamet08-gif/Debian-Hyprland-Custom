@@ -11,8 +11,9 @@ from pathlib import Path
 from typing import Iterable
 
 from .discovery_download import DiscoveryDownloader
+from .config import load_config, save_config
 from .history import HistoryManager
-from .ipc import EngineClient
+from .ipc import EngineClient, EngineIPCError
 from .library import Library
 from .models import MediaType, PlaylistMode, Wallpaper
 from .monitors import MonitorError, MonitorInfo, detect_monitors
@@ -44,6 +45,7 @@ class GuiBackend:
         library_roots: Iterable[Path] = DEFAULT_LIBRARY_ROOTS,
     ):
         self.paths = paths or EnginePaths.from_environment()
+        self.config = load_config(self.paths)
         self.library = library or Library(self.paths)
         self.client = client or EngineClient(self.paths)
         self.playlists = PlaylistManager(self.library)
@@ -53,6 +55,25 @@ class GuiBackend:
         self.recommendations = recommendations or RecommendationEngine(self.paths)
         self.library_roots = tuple(Path(root).expanduser() for root in library_roots)
         self.downloader = downloader or DiscoveryDownloader(self.library_roots[0])
+
+    def hud_settings(self) -> dict:
+        hud = self.config.ui.get("hud", {})
+        return dict(hud) if isinstance(hud, dict) else {}
+
+    def configure_hud(self, settings: dict) -> dict:
+        if not isinstance(settings, dict):
+            raise ValueError("les réglages HUD doivent être un objet JSON")
+        self.config.ui["hud"] = dict(settings)
+        save_config(self.config, self.paths)
+        try:
+            self.client.configure_hud(self.config.ui["hud"])
+        except (EngineIPCError, OSError, TimeoutError):
+            # The configuration remains saved when the session service is offline.
+            pass
+        return self.hud_settings()
+
+    def refresh_hud(self) -> dict:
+        return self.client.refresh_hud("*")
 
     def recommendation_data(self) -> dict:
         """Return one coherent snapshot for the Discover suggestions page."""
@@ -127,6 +148,10 @@ class GuiBackend:
         theme = self.theme_sync.apply(
             wallpaper.path, mode=theme_mode, profile=performance_profile
         )
+        try:
+            self.client.refresh_hud(output)
+        except (EngineIPCError, OSError, TimeoutError):
+            pass
         return {**result, "theme_sync": theme.reason}
 
     def set_favorite(self, wallpaper_id: int, favorite: bool) -> Wallpaper:

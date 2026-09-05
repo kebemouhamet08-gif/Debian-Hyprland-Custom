@@ -943,6 +943,7 @@ class EngineWindow(Adw.ApplicationWindow):
 
     def _settings_page(self):
         box = self._empty_page("Réglages", "Cache, téléchargement, thème, automatisation et options avancées.")
+        box.append(self._hud_settings_section())
         self.cache_label = Gtk.Label(label="Cache : calcul à la demande", xalign=0)
         box.append(self.cache_label)
         calculate = Gtk.Button(label="Mesurer le cache", halign=Gtk.Align.START)
@@ -960,7 +961,109 @@ class EngineWindow(Adw.ApplicationWindow):
                               halign=Gtk.Align.START)
         diagnose.connect("clicked", self._diagnose_downloader)
         box.append(diagnose)
-        return box
+        scroll = Gtk.ScrolledWindow(
+            vexpand=True,
+            hscrollbar_policy=Gtk.PolicyType.NEVER,
+            vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
+        )
+        scroll.set_child(box)
+        return scroll
+
+    def _hud_settings_section(self):
+        section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10,
+                          css_classes=["inspector-section"])
+        section.append(Gtk.Label(label="Desktop HUD", xalign=0,
+                                 css_classes=["title-2"]))
+        section.append(Gtk.Label(
+            label="Affiche le greeting, l’heure, la date et le texte japonais au-dessus du wallpaper.",
+            xalign=0, wrap=True, css_classes=["dim-label"],
+        ))
+
+        settings = self.backend.hud_settings()
+        self.hud_enabled = Gtk.Switch(
+            active=settings.get("enabled", True) is True,
+            halign=Gtk.Align.END,
+        )
+        self.hud_enabled.connect("notify::active", self._hud_changed)
+        section.append(self._settings_row("Activer le HUD", self.hud_enabled))
+
+        position = settings.get("position", {})
+        self.hud_x = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.05, 0.95, 0.01)
+        self.hud_x.set_value(float(position.get("x", 0.18)))
+        self.hud_x.set_digits(2)
+        self.hud_x.connect("value-changed", self._hud_changed)
+        section.append(self._settings_row("Position horizontale", self.hud_x))
+        self.hud_y = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.10, 0.90, 0.01)
+        self.hud_y.set_value(float(position.get("y", 0.30)))
+        self.hud_y.set_digits(2)
+        self.hud_y.connect("value-changed", self._hud_changed)
+        section.append(self._settings_row("Position verticale", self.hud_y))
+
+        self.hud_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.5, 2.0, 0.05)
+        self.hud_scale.set_value(float(settings.get("scale", 1.0)))
+        self.hud_scale.set_digits(2)
+        self.hud_scale.connect("value-changed", self._hud_changed)
+        section.append(self._settings_row("Échelle", self.hud_scale))
+        self.hud_opacity = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.15, 1.0, 0.05)
+        self.hud_opacity.set_value(float(settings.get("opacity", 1.0)))
+        self.hud_opacity.set_digits(2)
+        self.hud_opacity.connect("value-changed", self._hud_changed)
+        section.append(self._settings_row("Opacité", self.hud_opacity))
+
+        elements = settings.get("elements", {})
+        self.hud_elements = {}
+        for name, label in (
+            ("greeting", "Greeting"),
+            ("day", "Jour · police Anurati"),
+            ("time", "Heure"),
+            ("date", "Date"),
+            ("japanese", "Texte japonais"),
+            ("decorative_lines", "Lignes décoratives"),
+        ):
+            control = Gtk.CheckButton(label=label)
+            control.set_active(elements.get(name, True) is not False)
+            control.connect("toggled", self._hud_changed)
+            self.hud_elements[name] = control
+            section.append(control)
+
+        self.hud_username = Gtk.Entry(
+            text=str(settings.get("username", "ムハメト・ケベ")),
+            placeholder_text="Texte japonais ou nom affiché",
+        )
+        self.hud_username.connect("changed", self._hud_changed)
+        section.append(self._settings_row("Nom", self.hud_username))
+
+        self.hud_status = Gtk.Label(label="Modifications enregistrées automatiquement.",
+                                    xalign=0, css_classes=["dim-label"])
+        section.append(self.hud_status)
+        return section
+
+    @staticmethod
+    def _settings_row(label, child):
+        row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        row.append(Gtk.Label(label=label, xalign=0, css_classes=["heading"]))
+        row.append(child)
+        return row
+
+    def _hud_changed(self, _control, *_args):
+        if not hasattr(self, "hud_enabled"):
+            return
+        settings = {
+            "enabled": self.hud_enabled.get_active(),
+            "position": {"x": self.hud_x.get_value(), "y": self.hud_y.get_value()},
+            "scale": self.hud_scale.get_value(),
+            "opacity": self.hud_opacity.get_value(),
+            "username": self.hud_username.get_text()[:80],
+            "elements": {
+                name: control.get_active()
+                for name, control in self.hud_elements.items()
+            },
+        }
+        try:
+            self.backend.configure_hud(settings)
+            self.hud_status.set_text("HUD enregistré et actualisé.")
+        except Exception as error:
+            self.hud_status.set_text(f"Impossible d’enregistrer le HUD : {error}")
 
     @staticmethod
     def _empty_page(title, subtitle):

@@ -9,6 +9,12 @@ ghostty_dir="$config_home/ghostty"
 kitty_dir="$config_home/kitty"
 rofi_dir="$config_home/rofi"
 swaync_dir="$config_home/swaync"
+lock_dir="${XDG_RUNTIME_DIR:-/tmp}/deblestia-theme-sync.lock"
+
+if ! mkdir "$lock_dir" 2>/dev/null; then
+    exit 0
+fi
+trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT
 
 value_from_panel() {
     local name="$1" fallback="$2"
@@ -162,5 +168,8 @@ if command -v kitty >/dev/null 2>&1; then
         kill -SIGUSR1 "$pid" >/dev/null 2>&1 || true
     done
 fi
+for pid in $(pidof ghostty 2>/dev/null || true); do
+    kill -SIGUSR2 "$pid" >/dev/null 2>&1 || true
+done
 command -v swaync-client >/dev/null 2>&1 && swaync-client -rs >/dev/null 2>&1 || true
 command -v pkill >/dev/null 2>&1 && pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || true

@@ -47,6 +47,19 @@ class ThemeSyncTests(unittest.TestCase):
         extract_palette(self.media, frames=99, runner=runner)
         self.assertIn("4", runner.call_args.args[0])
 
+    def test_extract_accepts_extensionless_video_wallpaper(self):
+        current = Path(self.temp.name) / ".wallpaper_current"
+        current.write_bytes(b"video")
+        runner = mock.Mock(side_effect=[
+            subprocess.CompletedProcess([], 0, "video\n", ""),
+            subprocess.CompletedProcess([], 0, b"\0\0\0" * 4096, b""),
+        ])
+
+        palette = extract_palette(current, runner=runner)
+
+        self.assertEqual(palette.frames, 4)
+        self.assertEqual(runner.call_count, 2)
+
     def test_off_mode_has_no_side_effect(self):
         sync = ThemeSync(self.paths, extractor=mock.Mock(), runner=mock.Mock())
         self.assertFalse(sync.apply(self.media, mode="off").applied)

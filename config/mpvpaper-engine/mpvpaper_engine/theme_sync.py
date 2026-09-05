@@ -88,6 +88,19 @@ def palette_from_rgb(data: bytes, source: Path, frames: int) -> Palette:
     return Palette(tuple(ranked), foreground, background, str(source), frames)
 
 
+def _has_video_stream(source: Path, runner: Callable) -> bool:
+    try:
+        result = runner(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(source)],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    output = result.stdout.decode(errors="replace") if isinstance(result.stdout, bytes) else result.stdout
+    return result.returncode == 0 and output.strip() == "video"
+
+
 def extract_palette(
     source: Path,
     *,
@@ -96,7 +109,9 @@ def extract_palette(
 ) -> Palette:
     source = Path(source).expanduser().resolve()
     suffix = source.suffix.casefold()
-    if not source.is_file() or suffix not in IMAGE_EXTENSIONS | VIDEO_EXTENSIONS:
+    if not source.is_file():
+        raise ValueError("wallpaper is missing or unsupported")
+    if suffix not in IMAGE_EXTENSIONS | VIDEO_EXTENSIONS and not _has_video_stream(source, runner):
         raise ValueError("wallpaper is missing or unsupported")
     count = 1 if suffix in IMAGE_EXTENSIONS else max(1, min(int(frames), DEFAULT_FRAMES))
     command = ["ffmpeg", "-v", "error", "-i", str(source)]
@@ -106,7 +121,8 @@ def extract_palette(
         command.extend(["-vf", f"scale={SAMPLE_SIZE}:{SAMPLE_SIZE}"])
     command.extend(["-frames:v", str(count), "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
     try:
-        result = runner(command, capture_output=True, timeout=15, check=False)
+        timeout = 60 if count > 1 else 15
+        result = runner(command, capture_output=True, timeout=timeout, check=False)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ThemeSyncError(str(error)) from error
     if result.returncode != 0:

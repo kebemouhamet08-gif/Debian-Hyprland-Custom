@@ -431,6 +431,13 @@ class EngineWindow(Adw.ApplicationWindow):
         )
         self.discover_address.connect("activate", self._browser_address_activated)
         address_row.append(self.discover_address)
+        download_url = Gtk.Button(
+            label="Télécharger l’URL",
+            icon_name="document-save-symbolic",
+            tooltip_text="Télécharger directement l’adresse collée",
+        )
+        download_url.connect("clicked", self._download_address)
+        address_row.append(download_url)
         firefox = Gtk.Button(label="Ouvrir dans Firefox",
                              icon_name="web-browser-symbolic")
         firefox.connect("clicked", self._open_in_firefox)
@@ -643,6 +650,21 @@ class EngineWindow(Adw.ApplicationWindow):
         if not uri:
             return
         title = self.discover_web.get_title() or "wallpaper"
+        self._start_download(uri, title)
+
+    def _download_address(self, _button):
+        uri = self.discover_address.get_text().strip()
+        if not uri or "://" not in uri:
+            self.browser_status.set_text(
+                "Collez une URL complète avant de télécharger"
+            )
+            return
+        title = self.discover_web.get_title() or "wallpaper"
+        if uri != self.discover_web.get_uri():
+            title = "wallpaper"
+        self._start_download(uri, title)
+
+    def _start_download(self, uri, title):
         height = DOWNLOAD_QUALITIES[self.download_quality.get_selected()][1]
         target = "automatique" if height == 0 else f"{height}p"
         self.pending_download = (uri, title, height, "browser")

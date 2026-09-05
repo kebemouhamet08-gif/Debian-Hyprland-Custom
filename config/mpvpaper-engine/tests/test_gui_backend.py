@@ -70,6 +70,24 @@ class GuiBackendTests(unittest.TestCase):
         self.client.set_volume.assert_called_once_with("DP-1", 33)
         self.client.set_performance_profile.assert_called_once_with("DP-1", "eco")
 
+    def test_pasted_url_is_sent_to_discovery_downloader(self):
+        downloader = mock.Mock()
+        downloader.download.return_value = mock.Mock(path=None)
+        backend = GuiBackend(
+            self.paths, library=self.library, client=self.client,
+            monitor_detector=lambda: [], library_roots=(self.root,),
+            theme_sync=self.theme_sync, downloader=downloader,
+        )
+
+        backend.download_discovery_page(
+            "https://www.youtube.com/watch?v=example", "wallpaper", 1080
+        )
+
+        downloader.download.assert_called_once_with(
+            "https://www.youtube.com/watch?v=example", "wallpaper", 1080,
+            firefox=False,
+        )
+
     def test_playlist_next_is_functional(self):
         playlist = self.backend.create_playlist("Night")
         self.backend.add_to_playlist(playlist.id, self.wallpaper.id)

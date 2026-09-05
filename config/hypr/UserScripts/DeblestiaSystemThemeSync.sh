@@ -134,6 +134,11 @@ fi
 for command_name in kitty ghostty rofi swaync-client; do
     command -v "$command_name" >/dev/null 2>&1 && printf 'OK %s\n' "$command_name" || true
 done
-command -v kitty >/dev/null 2>&1 && kitty @ set-colors --all "$kitty_theme" >/dev/null 2>&1 || true
+if command -v kitty >/dev/null 2>&1; then
+    kitty @ set-colors --all "$kitty_theme" >/dev/null 2>&1 || true
+    for pid in $(pidof kitty 2>/dev/null || true); do
+        kill -SIGUSR1 "$pid" >/dev/null 2>&1 || true
+    done
+fi
 command -v swaync-client >/dev/null 2>&1 && swaync-client -rs >/dev/null 2>&1 || true
 command -v pkill >/dev/null 2>&1 && pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || true

@@ -54,12 +54,17 @@
 },
 
 "custom/cycle_wall": {
-	"format": " ",
-	"on-click": "$HOME/.local/bin/mpvpaper-engine-toggle",
-	"on-click-right": "$HOME/.local/bin/mpvpaper-enginectl random",
-	"on-click-middle": "$HOME/.config/hypr/scripts/WaybarStyles.sh",
+	"format": "{text}",
+	"return-type": "json",
+	"exec": "$HOME/.local/bin/mpvpaper-engine-waybar",
+	"interval": 5,
+	"signal": 8,
+	"on-click": "$HOME/.local/bin/mpvpaper-engine",
+	"on-click-middle": "$HOME/.local/bin/mpvpaper-enginectl toggle",
+	"on-click-right": "$HOME/.local/bin/mpvpaper-engine-quick-menu",
+	"on-scroll-up": "$HOME/.local/bin/mpvpaper-enginectl random",
+	"on-scroll-down": "$HOME/.local/bin/mpvpaper-enginectl random",
 	"tooltip": true,
-	"tooltip-format": "Clic gauche : fonds vidéo MPVpaper\nClic droit : fond vidéo aléatoire\nClic milieu : styles Waybar",
 },
 
 "custom/hint": {

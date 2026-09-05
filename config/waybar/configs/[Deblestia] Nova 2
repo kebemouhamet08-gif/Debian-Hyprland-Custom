@@ -1,0 +1,330 @@
+[
+{
+  "name": "deblestia-nova-2-primary",
+  "output": "eDP-1",
+  "include": [
+    "$HOME/.config/waybar/ModulesWorkspaces",
+    "$HOME/.config/waybar/Modules",
+    "$HOME/.config/waybar/ModulesCustom"
+  ],
+  "layer": "top",
+  "position": "top",
+  "height": 40,
+  "exclusive": true,
+  "fixed-center": true,
+  "ipc": true,
+  "spacing": 5,
+  "margin-top": 5,
+  "margin-left": 8,
+  "margin-right": 8,
+
+  "modules-left": [
+    "group/identity",
+    "group/workspace-island",
+    "group/launchers"
+  ],
+  "modules-center": ["group/media-player"],
+  "modules-right": [
+    "group/focus",
+    "group/system-monitor",
+    "group/tools",
+    "group/status",
+    "group/session"
+  ],
+
+  "group/identity": {
+    "orientation": "inherit",
+    "modules": ["custom/debian-menu", "hyprland/window"]
+  },
+  "group/workspace-island": {
+    "orientation": "inherit",
+    "modules": ["hyprland/workspaces#deblestia", "custom/workspace-overview"]
+  },
+  "group/launchers": {
+    "orientation": "inherit",
+    "drawer": {
+      "transition-duration": 200,
+      "children-class": "nova-drawer"
+    },
+    "modules": [
+      "custom/apps", "custom/terminal", "custom/files", "custom/browser",
+      "custom/wallpaper", "wlr/taskbar", "custom/restore-minimized"
+    ]
+  },
+  "group/media-player": {
+    "orientation": "inherit",
+    "modules": [
+      "custom/cava_mviz#primary", "custom/media-previous", "mpris#primary",
+      "custom/media-play-pause", "custom/media-next"
+    ]
+  },
+  "group/focus": {
+    "orientation": "inherit",
+    "drawer": {"transition-duration": 200, "children-class": "nova-drawer"},
+    "modules": ["custom/focus", "custom/notes"]
+  },
+  "group/system-monitor": {
+    "orientation": "inherit",
+    "drawer": {"transition-duration": 200, "children-class": "nova-drawer"},
+    "modules": ["custom/system", "cpu", "memory", "temperature", "disk"]
+  },
+  "group/tools": {
+    "orientation": "inherit",
+    "drawer": {"transition-duration": 200, "children-class": "nova-drawer"},
+    "modules": [
+      "custom/toolbox", "custom/theme", "custom/screenshot",
+      "custom/clipboard", "custom/hyprpicker"
+    ]
+  },
+  "group/status": {
+    "orientation": "inherit",
+    "drawer": {"transition-duration": 200, "children-class": "nova-drawer"},
+    "modules": ["group/status-core", "group/status-secondary"]
+  },
+  "group/status-core": {
+    "orientation": "inherit",
+    "modules": ["network", "pulseaudio", "battery"]
+  },
+  "group/status-secondary": {
+    "orientation": "inherit",
+    "modules": [
+      "privacy", "bluetooth", "backlight", "power-profiles-daemon",
+      "custom/updates", "custom/notifications", "idle_inhibitor", "tray"
+    ]
+  },
+  "group/session": {
+    "orientation": "inherit",
+    "modules": ["clock", "custom/power"]
+  },
+
+  "custom/debian-menu": {
+    "format": "",
+    "tooltip-format": "Deblestia Nova 2 · Milieu : modes · Droit : modes",
+    "on-click": "pkill rofi || rofi -show drun -theme $HOME/.config/rofi/DebianGlass.rasi",
+    "on-click-middle": "$HOME/.config/waybar/deblestia-waybar-switch.sh",
+    "on-click-right": "$HOME/.config/waybar/deblestia-waybar-switch.sh"
+  },
+  "hyprland/window": {
+    "format": "{title}",
+    "max-length": 24,
+    "separate-outputs": true,
+    "rewrite": {
+      "": "Bureau",
+      "(.*) — Mozilla Firefox": "  $1",
+      "(.*) - (kitty|zsh|fish)": "  $1"
+    }
+  },
+  "custom/workspace-overview": {
+    "format": "󰕮",
+    "tooltip-format": "Vue d’ensemble des bureaux",
+    "on-click": "$HOME/.config/hypr/scripts/OverviewToggle.sh"
+  },
+  "custom/apps": {"format": "󰀻", "tooltip-format": "Survol : applications"},
+  "custom/terminal": {"format": "", "tooltip-format": "Terminal", "on-click": "kitty"},
+  "custom/files": {"format": "", "tooltip-format": "Fichiers", "on-click": "thunar"},
+  "custom/browser": {"format": "", "tooltip-format": "Navigateur", "on-click": "firefox"},
+  "custom/wallpaper": {
+    "format": "{text}",
+    "return-type": "json",
+    "exec": "$HOME/.local/bin/mpvpaper-engine-waybar",
+    "interval": 5,
+    "signal": 8,
+    "on-click": "$HOME/.local/bin/mpvpaper-engine",
+    "on-click-middle": "$HOME/.local/bin/mpvpaper-enginectl toggle",
+    "on-click-right": "$HOME/.local/bin/mpvpaper-engine-quick-menu",
+    "on-scroll-up": "$HOME/.local/bin/mpvpaper-enginectl random",
+    "on-scroll-down": "$HOME/.local/bin/mpvpaper-enginectl random"
+  },
+  "wlr/taskbar": {
+    "format": "{icon}",
+    "icon-size": 16,
+    "all-outputs": false,
+    "tooltip-format": "{title}",
+    "on-click": "activate",
+    "on-click-middle": "close",
+    "ignore-list": []
+  },
+  "custom/restore-minimized": {
+    "format": "󰍔",
+    "tooltip-format": "Restaurer la dernière fenêtre minimisée",
+    "on-click": "$HOME/.config/hypr/UserScripts/RestoreMinimizedWindow.sh"
+  },
+
+  "custom/cava_mviz#primary": {
+    "exec": "$HOME/.config/hypr/scripts/WaybarCava.sh eDP-1",
+    "format": "{}"
+  },
+  "mpris#primary": {
+    "interval": 1,
+    "format": "{player_icon}  {dynamic}",
+    "format-paused": "{status_icon}  {dynamic}",
+    "dynamic-order": ["artist", "title"],
+    "dynamic-len": 24,
+    "on-click": "$HOME/.config/waybar/media-panel-toggle.sh",
+    "on-click-middle": "playerctl play-pause",
+    "on-click-right": "playerctl next",
+    "tooltip-format": "{artist} — {title}\nClic : panneau multimédia",
+    "player-icons": {"default": "", "firefox": "", "spotify": "", "vlc": "󰕼"},
+    "status-icons": {"paused": "󰐎", "playing": "", "stopped": ""}
+  },
+  "custom/media-previous": {"format": "󰒮", "tooltip-format": "Précédent", "on-click": "playerctl previous"},
+  "custom/media-play-pause": {
+    "exec": "sh -c 'case $(playerctl status 2>/dev/null) in Playing) printf 󰏤;; *) printf 󰐊;; esac'",
+    "interval": 1,
+    "tooltip-format": "Lecture / pause",
+    "on-click": "playerctl play-pause"
+  },
+  "custom/media-next": {"format": "󰒭", "tooltip-format": "Suivant", "on-click": "playerctl next"},
+
+  "custom/focus": {
+    "exec": "$HOME/.config/waybar/deblestia-focus.py",
+    "return-type": "json",
+    "interval": 1,
+    "on-click": "$HOME/.config/waybar/deblestia-focus.py toggle",
+    "on-click-middle": "$HOME/.config/waybar/deblestia-focus.py skip",
+    "on-click-right": "$HOME/.config/waybar/deblestia-focus.py reset"
+  },
+  "custom/notes": {"format": "󰎞", "tooltip-format": "Notes et tâches", "on-click": "$HOME/.config/waybar/deblestia-notes.sh"},
+  "custom/system": {"format": "󰍛", "tooltip-format": "Survol : performances · Clic : btop", "on-click": "$HOME/.config/waybar/deblestia-system-stats.sh"},
+  "cpu": {"interval": 2, "format": "CPU {usage}%"},
+  "memory": {"interval": 5, "format": "RAM {percentage}%"},
+  "temperature": {"interval": 5, "format": "{temperatureC}°", "critical-threshold": 85},
+  "disk": {"interval": 30, "path": "/", "format": "SSD {percentage_used}%"},
+  "custom/toolbox": {"format": "󰒓", "tooltip-format": "Survol : outils rapides"},
+  "custom/theme": {"format": "󰏘", "tooltip-format": "Palette Nova", "on-click": "$HOME/.config/waybar/deblestia-theme.sh"},
+  "custom/screenshot": {
+    "format": "󰹑",
+    "tooltip-format": "Clic : copier une zone · Droit : enregistrer",
+    "on-click": "grim -g \"$(slurp)\" - | wl-copy",
+    "on-click-right": "mkdir -p $HOME/Pictures/Screenshots && grim -g \"$(slurp)\" $HOME/Pictures/Screenshots/$(date +%F_%H-%M-%S).png"
+  },
+  "custom/clipboard": {"format": "󰅌", "tooltip-format": "Presse-papiers", "on-click": "cliphist list | rofi -dmenu -i -p Presse-papiers | cliphist decode | wl-copy"},
+  "custom/hyprpicker": {"format": "", "tooltip-format": "Copier une couleur", "on-click": "hyprpicker | wl-copy"},
+
+  "network": {
+    "interval": 2,
+    "format-wifi": "",
+    "format-ethernet": "󰈀",
+    "format-disconnected": "󰖪",
+    "tooltip-format-wifi": "{essid} · {signalStrength}%\n↓ {bandwidthDownBytes}  ↑ {bandwidthUpBytes}",
+    "tooltip-format-ethernet": "{ifname}\n↓ {bandwidthDownBytes}  ↑ {bandwidthUpBytes}",
+    "on-click": "kitty -e nmtui"
+  },
+  "pulseaudio": {
+    "format": "{icon}",
+    "format-bluetooth": "󰂰 {icon}",
+    "format-muted": "󰖁",
+    "format-icons": {"headphone": "", "default": ["", "", ""]},
+    "tooltip-format": "{desc} · {volume}%",
+    "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
+    "on-click-right": "pavucontrol",
+    "on-scroll-up": "wpctl set-volume -l 1.2 @DEFAULT_AUDIO_SINK@ 5%+",
+    "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
+  },
+  "battery": {
+    "states": {"warning": 30, "critical": 15},
+    "format": "{icon} {capacity}%",
+    "format-charging": " {capacity}%",
+    "format-icons": ["", "", "", "", ""]
+  },
+  "backlight": {
+    "format": "{icon}",
+    "format-icons": ["󰃞", "󰃟", "󰃠"],
+    "tooltip-format": "Luminosité {percent}%",
+    "on-scroll-up": "brightnessctl set +5%",
+    "on-scroll-down": "brightnessctl set 5%-"
+  },
+  "bluetooth": {"format": "", "format-connected": "󰂱 {num_connections}", "format-disabled": "󰂲", "on-click": "blueman-manager"},
+  "power-profiles-daemon": {"format": "{icon}", "format-icons": {"default": "", "performance": "", "balanced": "", "power-saver": ""}, "on-click": "$HOME/.config/waybar/power-profile-menu.sh"},
+  "custom/updates": {"exec": "$HOME/.config/waybar/deblestia-updates.sh", "return-type": "json", "interval": 21600, "signal": 8},
+  "custom/notifications": {"format": "", "on-click": "swaync-client -t -sw", "on-click-right": "swaync-client -d -sw"},
+  "idle_inhibitor": {"format": "{icon}", "format-icons": {"activated": "", "deactivated": ""}},
+  "privacy": {
+    "icon-spacing": 4,
+    "icon-size": 14,
+    "transition-duration": 200,
+    "modules": [
+      {"type": "screenshare", "tooltip": true},
+      {"type": "audio-in", "tooltip": true},
+      {"type": "video-in", "tooltip": true}
+    ]
+  },
+  "tray": {"icon-size": 15, "spacing": 5},
+  "clock": {"interval": 60, "format": "{:%a %d · %H:%M}", "tooltip-format": "<big>{:%B %Y}</big>\n<tt><small>{calendar}</small></tt>"},
+  "custom/power": {"format": "", "tooltip-format": "Session et alimentation", "on-click": "$HOME/.config/hypr/scripts/Wlogout.sh"}
+},
+{
+  "name": "deblestia-nova-2-secondary",
+  "output": "HDMI-A-1",
+  "include": [
+    "$HOME/.config/waybar/ModulesWorkspaces",
+    "$HOME/.config/waybar/Modules",
+    "$HOME/.config/waybar/ModulesCustom"
+  ],
+  "layer": "top",
+  "position": "top",
+  "height": 40,
+  "exclusive": true,
+  "fixed-center": true,
+  "ipc": true,
+  "spacing": 5,
+  "margin-top": 5,
+  "margin-left": 8,
+  "margin-right": 8,
+
+  "modules-left": ["group/identity-secondary", "group/workspace-island"],
+  "modules-center": ["mpris#secondary"],
+  "modules-right": ["group/status-core", "group/session-secondary"],
+
+  "group/identity-secondary": {
+    "orientation": "inherit",
+    "modules": ["custom/debian-menu", "hyprland/window"]
+  },
+  "group/workspace-island": {
+    "orientation": "inherit",
+    "modules": ["hyprland/workspaces#deblestia"]
+  },
+  "group/status-core": {
+    "orientation": "inherit",
+    "modules": ["network", "pulseaudio", "battery"]
+  },
+  "group/session-secondary": {
+    "orientation": "inherit",
+    "modules": ["clock", "custom/power"]
+  },
+
+  "custom/debian-menu": {
+    "format": "",
+    "tooltip-format": "Deblestia Nova 2 · Droit : changer d’interface",
+    "on-click": "pkill rofi || rofi -show drun -theme $HOME/.config/rofi/DebianGlass.rasi",
+    "on-click-right": "$HOME/.config/waybar/deblestia-waybar-switch.sh"
+  },
+  "hyprland/window": {"format": "{title}", "max-length": 18, "separate-outputs": true, "rewrite": {"": "Bureau"}},
+  "mpris#secondary": {
+    "interval": 2,
+    "format": "{player_icon}  {dynamic}",
+    "format-paused": "{status_icon}  {dynamic}",
+    "dynamic-order": ["artist", "title"],
+    "dynamic-len": 18,
+    "on-click": "$HOME/.config/waybar/media-panel-toggle.sh",
+    "on-click-middle": "playerctl play-pause",
+    "on-click-right": "playerctl next",
+    "player-icons": {"default": "", "firefox": "", "spotify": "", "vlc": "󰕼"},
+    "status-icons": {"paused": "󰐎", "playing": "", "stopped": ""}
+  },
+  "network": {"interval": 2, "format-wifi": "", "format-ethernet": "󰈀", "format-disconnected": "󰖪", "tooltip-format-wifi": "{essid} · {signalStrength}%"},
+  "pulseaudio": {
+    "format": "{icon}",
+    "format-bluetooth": "󰂰 {icon}",
+    "format-muted": "󰖁",
+    "format-icons": {"headphone": "", "default": ["", "", ""]},
+    "tooltip-format": "{desc} · {volume}%",
+    "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
+    "on-scroll-up": "wpctl set-volume -l 1.2 @DEFAULT_AUDIO_SINK@ 5%+",
+    "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
+  },
+  "battery": {"states": {"warning": 30, "critical": 15}, "format": "{icon} {capacity}%", "format-charging": " {capacity}%", "format-icons": ["", "", "", "", ""]},
+  "clock": {"interval": 60, "format": "{:%H:%M}", "tooltip-format": "<big>{:%B %Y}</big>\n<tt><small>{calendar}</small></tt>"},
+  "custom/power": {"format": "", "tooltip-format": "Session et alimentation", "on-click": "$HOME/.config/hypr/scripts/Wlogout.sh"}
+}
+]

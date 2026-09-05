@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+install_dir="${XDG_DATA_HOME:-$HOME/.local/share}/../lib/mpvpaper-engine"
+if [ ! -d "$install_dir" ]; then
+    install_dir="$HOME/.local/lib/mpvpaper-engine"
+fi
+
+case "${1:-}" in
+    --colors|--prefetch|--prefetch-continuous|--prefetch-all|--legacy)
+        if [ "${1:-}" = --legacy ]; then shift; fi
+        exec "$install_dir/mpvpaper-engine.py" "$@"
+        ;;
+    *)
+        exec "$install_dir/mpvpaper-engine-v2.py" "$@"
+        ;;
+esac

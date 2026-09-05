@@ -6,7 +6,6 @@ repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 action="${1:-install}"
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 waybar_dir="$config_home/waybar"
-selector_target="$waybar_dir/configs/[Deblestia] Nova"
 target="$config_home/quickshell/deblestia-nova"
 settings_dir="$config_home/illogical-impulse"
 settings_file="$settings_dir/config.json"
@@ -14,6 +13,8 @@ hypr_dir="$config_home/hypr"
 hypr_main="$hypr_dir/hyprland.conf"
 hypr_include="$hypr_dir/deblestia-nova-shell.conf"
 input_include="$hypr_dir/deblestia-input.conf"
+workspace_include="$hypr_dir/deblestia-workspaces.conf"
+ui_include="$hypr_dir/deblestia-ui.conf"
 launch_target="$hypr_dir/scripts/deblestia-nova-shell-launch.sh"
 mode_target="$hypr_dir/scripts/desktop-shell-mode.sh"
 palette_target="$hypr_dir/UserScripts/WaybarWallpaperSync.sh"
@@ -24,10 +25,12 @@ state_file="$state_dir/last-backup"
 source_url="${DEBLESTIA_NOVA_SOURCE:-https://github.com/pctrade/end4-pC.git}"
 source_line="source = $hypr_include"
 input_source_line="source = $input_include"
+workspace_source_line="source = $workspace_include"
+ui_source_line="source = $ui_include"
 
 usage() {
     cat <<'EOF'
-Usage : ./install-deblestia-nova.sh [action]
+Usage : ./install-deblestia-nova-shell.sh [action]
 
 Actions :
   check       vérifier les dépendances sans modifier le système
@@ -140,10 +143,11 @@ install_shell() {
     record_file "$settings_file" settings.json "$backup_dir"
     record_file "$hypr_include" hypr-include.conf "$backup_dir"
     record_file "$input_include" input-include.conf "$backup_dir"
+    record_file "$workspace_include" workspace-include.conf "$backup_dir"
+    record_file "$ui_include" ui-include.conf "$backup_dir"
     record_file "$launch_target" launch.sh "$backup_dir"
     record_file "$mode_target" desktop-shell-mode.sh "$backup_dir"
     record_file "$palette_target" waybar-wallpaper-sync.sh "$backup_dir"
-    record_file "$selector_target" nova-selector-entry "$backup_dir"
     record_file "$lock_target" lock.sh "$backup_dir"
     record_file "$hypr_main" hyprland.conf "$backup_dir"
 
@@ -154,11 +158,12 @@ install_shell() {
 
     install -m 0644 "$repo_dir/config/hypr/deblestia-nova-shell.conf" "$hypr_include"
     install -m 0644 "$repo_dir/config/hypr/deblestia-input.conf" "$input_include"
+    install -m 0644 "$repo_dir/config/hypr/deblestia-workspaces.conf" "$workspace_include"
+    install -m 0644 "$repo_dir/config/hypr/deblestia-ui.conf" "$ui_include"
     install -m 0755 "$repo_dir/config/hypr/scripts/deblestia-nova-shell-launch.sh" "$launch_target"
     install -m 0755 "$repo_dir/config/hypr/scripts/desktop-shell-mode.sh" "$mode_target"
     install -m 0755 "$repo_dir/config/hypr/UserScripts/WaybarWallpaperSync.sh" \
         "$palette_target"
-    install -m 0644 "$repo_dir/config/waybar/configs/[Deblestia] Nova" "$selector_target"
     install -m 0755 "$repo_dir/config/hypr/scripts/deblestia-nova-lock.sh" "$lock_target"
     merge_settings
     disable_conflicting_shell_source
@@ -172,6 +177,14 @@ install_shell() {
         printf '\n# Navigation souris et pavé tactile Deblestia\n%s\n' \
             "$input_source_line" >>"$hypr_main"
     fi
+    if ! grep -Fqx "$workspace_source_line" "$hypr_main"; then
+        printf '\n# Workspaces multi-écran Deblestia\n%s\n' \
+            "$workspace_source_line" >>"$hypr_main"
+    fi
+    if ! grep -Fqx "$ui_source_line" "$hypr_main"; then
+        printf '\n# Gestionnaire des interfaces Deblestia\n%s\n' \
+            "$ui_source_line" >>"$hypr_main"
+    fi
 
     printf '%s\n' "$backup_dir" >"$state_file"
     printf '%s\n' "$revision" >"$target/.deblestia-upstream-revision"
@@ -181,7 +194,7 @@ install_shell() {
     fi
     printf '\nDeblestia Nova installé.\nRévision amont : %s\nSauvegarde : %s\n' \
         "$revision" "$backup_dir"
-    printf 'Démarrage : %s launch\n' "$repo_dir/install-deblestia-nova.sh"
+    printf 'Démarrage : %s launch\n' "$repo_dir/install-deblestia-nova-shell.sh"
 }
 
 launch_shell() {
@@ -189,11 +202,10 @@ launch_shell() {
         printf "Deblestia Nova n'est pas installé. Lancez d'abord install.\n" >&2
         return 1
     fi
-    if [ -d "$waybar_dir/configs" ]; then
-        ln -sfn "$selector_target" "$waybar_dir/config"
-    fi
     if [ -x "$mode_target" ]; then
-        "$mode_target" "[Deblestia] Nova"
+        mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/deblestia"
+        printf 'nova-shell\n' >"${XDG_STATE_HOME:-$HOME/.local/state}/deblestia/ui-mode"
+        "$mode_target" nova-shell
     else
         "$launch_target" --force
     fi

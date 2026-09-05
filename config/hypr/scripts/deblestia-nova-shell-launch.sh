@@ -7,8 +7,9 @@ force_launch=false
 
 # Au démarrage de Hyprland, Nova ne s'ouvre que s'il est le profil mémorisé.
 # `--force` est utilisé par le sélecteur lors d'un changement explicite.
-active_layout="$(basename "$(readlink -f "$HOME/.config/waybar/config")" 2>/dev/null || true)"
-if ! $force_launch && [ "$active_layout" != "[Deblestia] Nova" ]; then
+state_file="${XDG_STATE_HOME:-$HOME/.local/state}/deblestia/ui-mode"
+active_mode="$(cat "$state_file" 2>/dev/null || true)"
+if ! $force_launch && [ "$active_mode" != nova-shell ]; then
     exit 0
 fi
 

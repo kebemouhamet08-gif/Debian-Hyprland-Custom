@@ -22,6 +22,25 @@ from urllib.parse import parse_qs, quote_plus, urljoin
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from mpvpaper_download import (
+    IMAGE_EXTENSIONS,
+    MEDIA_EXTENSIONS,
+    QUALITY_CHOICES,
+    detect_hardware_profile,
+    force_steam_workshop_download,
+    requested_height,
+    steam_workshop_id,
+)
+from mpvpaper_engine.config import (
+    COLOR_DEFAULTS,
+    LEGACY_DEFAULT_CONFIG,
+    bounded_number,
+    load_legacy_compatible_config,
+    normalize_legacy_profile,
+    save_legacy_config,
+    validate_output_name,
+)
+
 import gi
 
 gi.require_version("Adw", "1")
@@ -58,19 +77,7 @@ V2_INSTALLER = Path(os.environ.get(
 V2_THEME_MANIFEST = V2_INSTALLER.parent / "config" / "v2" / "themes.tsv"
 SDDM_INSTALLER = Path.home() / ".local" / "lib" / "mpvpaper-engine" / "install-sddm-background.sh"
 LOCAL_YTDLP = Path.home() / ".local" / "bin" / "yt-dlp"
-DEFAULT_CONFIG = {
-    "wallpaper": "", "output": "*", "volume": 0, "speed": 1.0,
-    "loop": True, "hardware_decode": True, "auto_pause": True, "autostart": True,
-    "brightness": 0, "contrast": 0, "gamma": 0, "saturation": 0, "hue": 0,
-    "temperature": 6500,
-    "red_balance": 0, "green_balance": 0, "blue_balance": 0,
-}
-COLOR_DEFAULTS = {
-    key: DEFAULT_CONFIG[key] for key in (
-        "brightness", "contrast", "gamma", "saturation", "hue",
-        "temperature", "red_balance", "green_balance", "blue_balance",
-    )
-}
+DEFAULT_CONFIG = dict(LEGACY_DEFAULT_CONFIG)
 COLOR_PRESETS = {
     "Original": COLOR_DEFAULTS,
     "Bureau": {**COLOR_DEFAULTS, "contrast": 5, "saturation": 5},
@@ -562,12 +569,20 @@ class DownloadLinkParser(HTMLParser):
         self.links = []
 
     def handle_starttag(self, tag, attrs):
-        if tag != "a":
-            return
-        href = dict(attrs).get("href", "")
-        lowered = href.lower()
-        if "/dl/" in lowered or lowered.endswith(tuple(VIDEO_EXTENSIONS)):
-            self.links.append(href)
+        values = dict(attrs)
+        links = []
+        if tag == "a":
+            links.append(values.get("href", ""))
+        elif tag in {"img", "source"}:
+            links.extend((values.get("src", ""), values.get("data-src", "")))
+            links.extend(
+                item.strip().split(" ", 1)[0]
+                for item in values.get("srcset", "").split(",") if item.strip()
+            )
+        for link in links:
+            lowered = link.casefold().split("?", 1)[0]
+            if "/dl/" in lowered or lowered.endswith(tuple(MEDIA_EXTENSIONS)):
+                self.links.append(link)
 
 
 class PreviewParser(HTMLParser):
@@ -875,22 +890,71 @@ def prefetch_suggestions(desired_new=None, page_budget=None):
     return 0 if count - initial_count >= desired_new else 3
 
 
-def page_download_url(uri):
+def resolution_hint(uri):
+    lowered = uri.casefold()
+    for pattern, height in (
+        (r"(?:8k|4320p?|7680x4320)", 4320),
+        (r"(?:4k|2160p?|3840x2160)", 2160),
+        (r"(?:1440p?|2560x1440|2k)", 1440),
+        (r"(?:1080p?|1920x1080|fullhd)", 1080),
+        (r"(?:720p?|1280x720)", 720),
+    ):
+        if re.search(pattern, lowered):
+            return height
+    return 0
+
+
+def page_download_url(uri, target_height=2160):
     try:
         request = Request(uri, headers={"User-Agent": "Mozilla/5.0 MPVpaperEngine/1.0"})
         with urlopen(request, timeout=15) as response:
             parser = DownloadLinkParser()
             parser.feed(read_limited(response, MAX_SOURCE_PAGE_BYTES).decode("utf-8", "replace"))
         if parser.links:
-            ranked = sorted(
-                parser.links,
-                key=lambda link: ("/4k/" in link.lower(), "/hd/" in link.lower()),
-                reverse=True,
-            )
+            ranked = sorted(set(parser.links), key=lambda link: (
+                resolution_hint(link) <= target_height,
+                resolution_hint(link) if resolution_hint(link) <= target_height
+                else -resolution_hint(link),
+                Path(urlparse(link).path).suffix.casefold() in VIDEO_EXTENSIONS,
+            ), reverse=True)
             return urljoin(uri, ranked[0])
     except (OSError, ValueError):
         pass
     return uri
+
+
+def download_direct_image(uri, title):
+    request = Request(uri, headers={"User-Agent": "Mozilla/5.0 MPVpaperEngine/2"})
+    with urlopen(request, timeout=45) as response:
+        content_type = response.headers.get_content_type()
+        if not content_type.startswith("image/"):
+            raise ValueError("le lien choisi n’est pas une image")
+        suffixes = {
+            "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
+            "image/avif": ".avif", "image/bmp": ".bmp",
+        }
+        suffix = Path(urlparse(response.geturl()).path).suffix.casefold()
+        if suffix not in IMAGE_EXTENSIONS:
+            suffix = suffixes.get(content_type, ".jpg")
+        name = re.sub(r"[^A-Za-z0-9._ -]+", "_", title).strip(" ._")[:150] or "fond-image"
+        destination = LIBRARY_DIR / f"{name}{suffix}"
+        counter = 2
+        while destination.exists():
+            destination = LIBRARY_DIR / f"{name}-{counter}{suffix}"
+            counter += 1
+        temporary = destination.with_name(f".{destination.name}.part")
+        total = 0
+        try:
+            with temporary.open("wb") as stream:
+                while block := response.read(1024 * 1024):
+                    total += len(block)
+                    if total > 512 * 1024 * 1024:
+                        raise ValueError("image distante trop volumineuse")
+                    stream.write(block)
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+    return destination
 
 
 def suggestion_thumbnail_path(uri):
@@ -927,65 +991,23 @@ def fetch_suggestion_thumbnail(uri, destination):
 
 
 def bounded_config_number(value, default, minimum, maximum, number_type=int):
-    try:
-        parsed = number_type(value)
-    except (TypeError, ValueError, OverflowError):
-        return default
-    return max(minimum, min(maximum, parsed))
+    return bounded_number(value, default, minimum, maximum, number_type)
 
 
 def valid_output_name(value):
-    return isinstance(value, str) and bool(re.fullmatch(
-        r"(?:\*|[A-Za-z0-9][A-Za-z0-9_.-]{0,127})", value
-    ))
+    return validate_output_name(value)
 
 
 def normalize_config_profile(data, output="*"):
-    source = data if isinstance(data, dict) else {}
-    profile = dict(DEFAULT_CONFIG)
-    wallpaper = source.get("wallpaper", "")
-    profile["wallpaper"] = wallpaper if isinstance(wallpaper, str) else ""
-    requested_output = source.get("output", output)
-    profile["output"] = requested_output if valid_output_name(requested_output) else output
-    profile["volume"] = bounded_config_number(source.get("volume"), 0, 0, 100)
-    profile["speed"] = bounded_config_number(source.get("speed"), 1.0, 0.1, 5.0, float)
-    for key in ("loop", "hardware_decode", "auto_pause", "autostart"):
-        if isinstance(source.get(key), bool):
-            profile[key] = source[key]
-    for key in ("brightness", "contrast", "gamma", "saturation", "hue",
-                "red_balance", "green_balance", "blue_balance"):
-        profile[key] = bounded_config_number(source.get(key), COLOR_DEFAULTS[key], -100, 100)
-    profile["temperature"] = bounded_config_number(source.get("temperature"), 6500, 1000, 40000)
-    return profile
+    return normalize_legacy_profile(data, output)
 
 
 def load_config():
-    try:
-        data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        data = {}
-    config = normalize_config_profile(data)
-    assignments = data.get("assignments") if isinstance(data, dict) else None
-    config["assignments"] = {}
-    if isinstance(assignments, dict):
-        for output, assignment in assignments.items():
-            if not valid_output_name(output) or not isinstance(assignment, dict):
-                continue
-            profile = normalize_config_profile(assignment, output=output)
-            config["assignments"][output] = {
-                key: profile[key] for key in DEFAULT_CONFIG if key != "output"
-            }
-    elif config["wallpaper"]:
-        config["assignments"][config["output"]] = {
-            key: config[key] for key in DEFAULT_CONFIG if key != "output"
-        }
-    return config
+    return load_legacy_compatible_config(CONFIG_FILE)
 
 
 def save_config(config):
-    CONFIG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-    CONFIG_DIR.chmod(0o700)
-    atomic_write_text(CONFIG_FILE, json.dumps(config, indent=2) + "\n")
+    save_legacy_config(config, CONFIG_FILE)
 
 
 def bounded_process(command, timeout, **options):
@@ -1014,14 +1036,19 @@ def monitor_names():
 def probe_video_duration(path):
     try:
         result = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height:format=duration", "-of", "json", str(path)],
             capture_output=True, text=True, timeout=4, check=False,
         )
-        seconds = int(float(result.stdout.strip()))
-        return f"{seconds // 60}:{seconds % 60:02d}"
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        return "vidéo"
+        data = json.loads(result.stdout)
+        stream = (data.get("streams") or [{}])[0]
+        dimensions = f"{stream.get('width', '?')}×{stream.get('height', '?')}"
+        if path.suffix.casefold() in IMAGE_EXTENSIONS:
+            return f"{dimensions} · image"
+        seconds = int(float(data.get("format", {}).get("duration", 0)))
+        return f"{dimensions} · {seconds // 60}:{seconds % 60:02d}"
+    except (OSError, ValueError, TypeError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return "média"
 
 
 def thumbnail_path(video):
@@ -1032,6 +1059,40 @@ def thumbnail_path(video):
 def metadata_key(video):
     signature = f"{video.resolve()}:{video.stat().st_mtime_ns}"
     return hashlib.sha256(signature.encode()).hexdigest()
+
+
+def media_kind(path):
+    suffix = Path(path).suffix.casefold()
+    if suffix in VIDEO_EXTENSIONS:
+        return "video"
+    if suffix in IMAGE_EXTENSIONS:
+        return "image"
+    return None
+
+
+def media_matches_filter(path, category="all", query=""):
+    kind = media_kind(path)
+    return bool(
+        kind
+        and category in {"all", kind}
+        and query.strip().casefold() in Path(path).stem.casefold()
+    )
+
+
+def validate_deletable_media(path, library_roots, protected_paths=()):
+    candidate = Path(path).expanduser().resolve(strict=True)
+    if not candidate.is_file() or media_kind(candidate) is None:
+        raise ValueError("Le fichier sélectionné n’est pas un média pris en charge")
+    roots = [Path(root).expanduser().resolve() for root in library_roots]
+    if not any(candidate == root or root in candidate.parents for root in roots):
+        raise ValueError("Le média ne se trouve pas dans une bibliothèque gérée")
+    protected = {
+        Path(item).expanduser().resolve()
+        for item in protected_paths if item
+    }
+    if candidate in protected:
+        raise ValueError("Impossible de supprimer un fond actuellement assigné")
+    return candidate
 
 
 class WallpaperCard(Gtk.FlowBoxChild):
@@ -1047,7 +1108,9 @@ class WallpaperCard(Gtk.FlowBoxChild):
         name = Gtk.Label(label=path.stem, xalign=0, ellipsize=3, max_width_chars=25)
         name.add_css_class("card-title")
         content.append(name)
-        content.append(Gtk.Label(label=duration, xalign=0, css_classes=["secondary-text"]))
+        media_type = "Vidéo" if media_kind(path) == "video" else "Image"
+        content.append(Gtk.Label(label=f"{media_type} · {duration}", xalign=0,
+                     css_classes=["secondary-text"]))
         self.set_child(content)
 
 
@@ -1102,6 +1165,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.set_default_size(1120, 720)
         self.set_size_request(760, 520)
         self.config = load_config()
+        self.hardware_profile = detect_hardware_profile()
         self.metadata = self.load_metadata()
         self.taste = TasteStore()
         self.suggestion_thumbnail_attempted = set()
@@ -1134,7 +1198,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
     def build_ui(self):
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
-        import_button = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="Importer des vidéos")
+        import_button = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="Importer des images ou vidéos")
         import_button.connect("clicked", self.import_videos)
         header.pack_start(import_button)
         youtube_button = Gtk.Button(icon_name="video-x-generic-symbolic",
@@ -1159,6 +1223,17 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.search = Gtk.SearchEntry(placeholder_text="Rechercher dans la bibliothèque")
         self.search.connect("search-changed", self.filter_library)
         library.append(self.search)
+        self.library_filter = "all"
+        self.media_filter = Gtk.DropDown.new_from_strings(
+            ["Tous les médias", "Vidéos", "Images"]
+        )
+        self.media_filter.set_tooltip_text("Afficher séparément les vidéos et les images")
+        self.media_filter.connect("notify::selected", self.media_filter_changed)
+        library.append(self.media_filter)
+        self.library_summary = Gtk.Label(
+            label="", xalign=0, css_classes=["dim-label"],
+        )
+        library.append(self.library_summary)
         scroll = Gtk.ScrolledWindow(vexpand=True)
         self.flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.SINGLE, homogeneous=False,
                                 column_spacing=12, row_spacing=12, min_children_per_line=2,
@@ -1173,7 +1248,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         inspector = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16,
                             margin_top=18, margin_bottom=18, margin_start=18, margin_end=18)
         inspector.append(Gtk.Label(label="Réglages", xalign=0, css_classes=["title-2"]))
-        self.selected_label = Gtk.Label(label="Sélectionnez une vidéo", xalign=0, wrap=True,
+        self.selected_label = Gtk.Label(label="Sélectionnez un média", xalign=0, wrap=True,
                                         css_classes=["dim-label"])
         inspector.append(self.selected_label)
 
@@ -1187,6 +1262,20 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.output.connect("notify::selected", self.output_changed)
         output_box.append(self.output)
         inspector.append(output_box)
+
+        fit_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        fit_box.append(Gtk.Label(label="Adaptation à l’écran", xalign=0,
+                                 css_classes=["heading"]))
+        self.fit_modes = ["cover", "contain", "stretch"]
+        self.fit = Gtk.DropDown.new_from_strings([
+            "Remplir · recadrage", "Contenir · bandes", "Étirer · sans bandes",
+        ])
+        self.fit.set_selected(self.fit_modes.index(self.config.get("fit_mode", "cover")))
+        self.fit.set_tooltip_text(
+            "Remplir occupe tout l’écran en rognant les bords si le format diffère."
+        )
+        fit_box.append(self.fit)
+        inspector.append(fit_box)
 
         volume_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.volume_label = Gtk.Label(label=f"Volume : {self.config['volume']} %", xalign=0,
@@ -1221,6 +1310,11 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.login_button.set_sensitive(self.selected is not None)
         self.login_button.connect("clicked", self.set_login_wallpaper)
         inspector.append(self.login_button)
+        self.delete_button = Gtk.Button(label="Supprimer le média",
+                        icon_name="user-trash-symbolic")
+        self.delete_button.set_sensitive(False)
+        self.delete_button.connect("clicked", self.confirm_delete_selected)
+        inspector.append(self.delete_button)
         self.status = Gtk.Label(label="", xalign=0, wrap=True, css_classes=["dim-label"])
         inspector.append(self.status)
         inspector_scroll.set_child(inspector)
@@ -1516,11 +1610,21 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         sources.set_tooltip_text("Catalogue de fonds vidéo")
         sources.connect("notify::selected", self.source_changed)
         navigation.append(sources)
+        self.download_quality = Gtk.DropDown.new_from_strings(
+            [label for label, _height in QUALITY_CHOICES]
+        )
+        self.download_quality.set_selected(0)
+        self.download_quality.set_tooltip_text(
+            f"Auto : {self.hardware_profile.target_height}p · {self.hardware_profile.reason}"
+        )
+        navigation.append(self.download_quality)
         self.web_address = Gtk.Entry(hexpand=True, placeholder_text="Rechercher ou saisir une adresse")
         self.web_address.connect("activate", self.open_web_address)
         navigation.append(self.web_address)
-        download_button = Gtk.Button(icon_name="document-save-symbolic",
-                                     tooltip_text="Télécharger la vidéo de cette page")
+        download_button = Gtk.Button(
+            icon_name="document-save-symbolic",
+            tooltip_text="Télécharger l’image, la vidéo ou forcer l’import Steam Workshop",
+        )
         download_button.connect("clicked", self.download_current_page)
         navigation.append(download_button)
         self.adblock_button = Gtk.ToggleButton(icon_name="security-high-symbolic",
@@ -2077,15 +2181,43 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         uri = self.web_view.get_uri()
         if not uri:
             return
-        self.download_status.set_text("Recherche de la vidéo sur cette page…")
+        selected_height = QUALITY_CHOICES[self.download_quality.get_selected()][1]
+        height = requested_height(selected_height, self.hardware_profile)
+        item_id = steam_workshop_id(uri)
+        if item_id:
+            self.download_status.set_text(
+                f"Import forcé de Steam Workshop #{item_id} · cible {height}p…"
+            )
+
+            def steam_worker():
+                outcome = force_steam_workshop_download(uri, LIBRARY_DIR, height)
+                GLib.idle_add(self.workshop_download_finished, uri, outcome)
+
+            threading.Thread(target=steam_worker, daemon=True).start()
+            return
+        self.download_status.set_text(f"Recherche du meilleur média jusqu’à {height}p…")
         title = (self.web_view.get_title() or "fond-video").replace("/", "-")
 
         def worker():
-            download_uri = page_download_url(uri)
+            download_uri = page_download_url(uri, height)
+            if Path(urlparse(download_uri).path).suffix.casefold() in IMAGE_EXTENSIONS:
+                try:
+                    destination = download_direct_image(download_uri, title)
+                    result = subprocess.CompletedProcess(
+                        [download_uri], 0, stdout=str(destination) + "\n", stderr="",
+                    )
+                except (OSError, ValueError) as error:
+                    result = subprocess.CompletedProcess(
+                        [download_uri], 1, stdout="", stderr=str(error),
+                    )
+                GLib.idle_add(self.page_download_finished, result)
+                return
             result = bounded_process(
                 [
                     str(LOCAL_YTDLP) if LOCAL_YTDLP.is_file() else "yt-dlp",
                     "--no-playlist", "--no-progress",
+                    "-f", f"bv*[height<={height}]+ba/b[height<={height}]/best",
+                    "--merge-output-format", "mp4", "--remux-video", "mp4",
                     "--print", "after_move:filepath",
                     "-o", str(LIBRARY_DIR / f"{title[:160]}.%(ext)s"), download_uri,
                 ],
@@ -2095,17 +2227,29 @@ class MPVpaperWindow(Adw.ApplicationWindow):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def workshop_download_finished(self, uri, outcome):
+        if outcome.path is None or not outcome.path.is_file():
+            self.download_status.set_text(f"Import Steam impossible : {outcome.message}")
+            return
+        self.selected = outcome.path
+        self.download_status.set_text(f"{outcome.message} : {outcome.path.name}")
+        self.taste.record(uri, outcome.path.stem, 2.0, candidate=True)
+        self.load_library()
+        self.selected_label.set_text(outcome.path.name)
+        self.apply_button.set_sensitive(True)
+        self.login_button.set_sensitive(True)
+
     def page_download_finished(self, result):
         if result.returncode == 0:
             paths = [line for line in result.stdout.splitlines() if line.strip()]
-            name = Path(paths[-1]).name if paths else "vidéo"
+            name = Path(paths[-1]).name if paths else "média"
             self.download_status.set_text(f"Ajouté à la bibliothèque : {name}")
             self.taste.record(self.web_view.get_uri(), self.web_view.get_title() or name, 2.0,
                               candidate=True)
             self.load_library()
         else:
             message = result.stderr.strip().splitlines()
-            detail = message[-1] if message else "aucune vidéo détectée"
+            detail = message[-1] if message else "aucun média détecté"
             self.download_status.set_text(f"Téléchargement impossible : {detail}")
 
     def download_started(self, _session, download):
@@ -2146,15 +2290,19 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         row.set_activatable_widget(switch)
         return row, switch
 
-    def videos(self):
-        videos = set()
+    def media_files(self):
+        media = set()
         for directory in (LIBRARY_DIR, LEGACY_LIBRARY_DIR):
             if directory.is_dir():
-                videos.update(
+                media.update(
                     path.resolve() for path in directory.rglob("*")
-                    if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS
+                    if path.is_file() and path.suffix.lower() in MEDIA_EXTENSIONS
                 )
-        return sorted(videos, key=lambda path: path.name.lower())
+        return sorted(media, key=lambda path: path.name.lower())
+
+    def videos(self):
+        return [path for path in self.media_files()
+                if path.suffix.casefold() in VIDEO_EXTENSIONS]
 
     def load_metadata(self):
         try:
@@ -2171,7 +2319,14 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             self.flow.remove(child)
         self.cards = []
         missing = []
-        for video in self.videos():
+        media_files = self.media_files()
+        video_count = sum(media_kind(path) == "video" for path in media_files)
+        image_count = sum(media_kind(path) == "image" for path in media_files)
+        self.library_summary.set_text(
+            f"{video_count} vidéo{'s' if video_count != 1 else ''} · "
+            f"{image_count} image{'s' if image_count != 1 else ''}"
+        )
+        for video in media_files:
             thumb = thumbnail_path(video)
             key = metadata_key(video)
             card = WallpaperCard(video, thumb, self.metadata.get(key, "Analyse en cours…"))
@@ -2183,24 +2338,40 @@ class MPVpaperWindow(Adw.ApplicationWindow):
                 self.flow.select_child(card)
         if missing:
             threading.Thread(target=self.generate_thumbnails, args=(missing,), daemon=True).start()
+        self.apply_library_filters(self.search.get_text())
 
     def generate_thumbnails(self, items):
         for video, thumb, key in items:
             if not thumb.exists():
-                bounded_process(
-                    ["ffmpegthumbnailer", "-i", str(video), "-o", str(thumb),
-                     "-s", "480", "-t", "20"],
-                    timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                )
+                if video.suffix.casefold() in IMAGE_EXTENSIONS:
+                    bounded_process(
+                        ["ffmpeg", "-y", "-i", str(video), "-frames:v", "1",
+                         "-vf", "scale='min(480,iw)':-2", str(thumb)],
+                        timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    )
+                else:
+                    bounded_process(
+                        ["ffmpegthumbnailer", "-i", str(video), "-o", str(thumb),
+                         "-s", "480", "-t", "20"],
+                        timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    )
             if key not in self.metadata:
                 self.metadata[key] = probe_video_duration(video)
         self.save_metadata()
         GLib.idle_add(self.load_library)
 
     def filter_library(self, entry):
-        query = entry.get_text().casefold()
+        self.apply_library_filters(entry.get_text())
+
+    def media_filter_changed(self, dropdown, _property):
+        self.library_filter = ("all", "video", "image")[dropdown.get_selected()]
+        self.apply_library_filters(self.search.get_text())
+
+    def apply_library_filters(self, query):
         for card in self.cards:
-            card.set_visible(query in card.path.stem.casefold())
+            card.set_visible(media_matches_filter(
+                card.path, self.library_filter, query,
+            ))
 
     def selection_changed(self, flow):
         selected = flow.get_selected_children()
@@ -2210,6 +2381,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.selected_label.set_text(self.selected.name)
         self.apply_button.set_sensitive(True)
         self.login_button.set_sensitive(True)
+        self.delete_button.set_sensitive(True)
 
     def output_changed(self, dropdown, _property):
         output = self.output_names[dropdown.get_selected()]
@@ -2219,25 +2391,75 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             return
         wallpaper = Path(profile.get("wallpaper", ""))
         self.selected = wallpaper if wallpaper.is_file() else None
-        self.selected_label.set_text(wallpaper.name if self.selected else "Sélectionnez une vidéo")
+        self.selected_label.set_text(wallpaper.name if self.selected else "Sélectionnez un média")
         self.volume.set_value(profile.get("volume", 0))
         speed = float(profile.get("speed", 1.0))
         self.speed.set_selected(self.speeds.index(speed) if speed in self.speeds else 2)
+        fit_mode = profile.get("fit_mode", "cover")
+        self.fit.set_selected(self.fit_modes.index(fit_mode) if fit_mode in self.fit_modes else 0)
         self.loop[1].set_active(profile.get("loop", True))
         self.hardware[1].set_active(profile.get("hardware_decode", True))
         self.auto_pause[1].set_active(profile.get("auto_pause", True))
         self.autostart[1].set_active(profile.get("autostart", True))
         self.apply_button.set_sensitive(self.selected is not None)
         self.login_button.set_sensitive(self.selected is not None)
+        self.delete_button.set_sensitive(self.selected is not None)
         for card in self.cards:
             if self.selected and card.path.resolve() == self.selected.resolve():
                 self.flow.select_child(card)
                 break
 
+    def delete_media_file(self, path):
+        protected = [self.config.get("wallpaper", "")]
+        for profile in self.config.get("assignments", {}).values():
+            if isinstance(profile, dict) and profile.get("wallpaper"):
+                protected.append(profile["wallpaper"])
+        candidate = validate_deletable_media(
+            path, (LIBRARY_DIR, LEGACY_LIBRARY_DIR), protected,
+        )
+        key = metadata_key(candidate)
+        thumb = thumbnail_path(candidate)
+        if not Gio.File.new_for_path(str(candidate)).trash(None):
+            raise OSError("Le déplacement vers la corbeille a échoué")
+        self.metadata.pop(key, None)
+        self.save_metadata()
+        thumb.unlink(missing_ok=True)
+
+    def confirm_delete_selected(self, _button):
+        if not self.selected:
+            return
+        dialog = Gtk.AlertDialog(
+            message=f"Mettre « {self.selected.name} » à la corbeille ?",
+            detail=("Le fichier sera retiré de la bibliothèque locale, mais pourra "
+                    "être restauré depuis la corbeille."),
+            buttons=["Annuler", "Mettre à la corbeille"],
+        )
+        dialog.set_cancel_button(0)
+        dialog.set_default_button(0)
+        dialog.choose(self, None, self.delete_dialog_finished, self.selected)
+
+    def delete_dialog_finished(self, dialog, result, path):
+        try:
+            if dialog.choose_finish(result) != 1:
+                return
+            self.delete_media_file(path)
+        except (GLib.Error, OSError, ValueError) as error:
+            self.status.set_text(f"Suppression impossible : {error}")
+            return
+        self.selected = None
+        self.selected_label.set_text("Sélectionnez un média")
+        self.apply_button.set_sensitive(False)
+        self.login_button.set_sensitive(False)
+        self.delete_button.set_sensitive(False)
+        self.load_library()
+        self.status.set_text("Média placé dans la corbeille.")
+
     def import_videos(self, _button):
-        dialog = Gtk.FileDialog(title="Importer des fonds vidéo", modal=True)
-        video_filter = Gtk.FileFilter(name="Vidéos")
+        dialog = Gtk.FileDialog(title="Importer des fonds image ou vidéo", modal=True)
+        video_filter = Gtk.FileFilter(name="Images et vidéos")
         for mime in ("video/mp4", "video/webm", "video/x-matroska", "video/quicktime", "video/x-msvideo"):
+            video_filter.add_mime_type(mime)
+        for mime in ("image/jpeg", "image/png", "image/webp", "image/avif", "image/bmp"):
             video_filter.add_mime_type(mime)
         filters = Gio.ListStore.new(Gtk.FileFilter)
         filters.append(video_filter)
@@ -2254,8 +2476,11 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         content.append(url_entry)
         quality_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         quality_box.append(Gtk.Label(label="Qualité", xalign=0, hexpand=True))
-        quality = Gtk.DropDown.new_from_strings(["1080p", "1440p", "2160p (4K)"])
-        quality.set_selected(2)
+        quality = Gtk.DropDown.new_from_strings([label for label, _height in QUALITY_CHOICES])
+        quality.set_selected(0)
+        quality.set_tooltip_text(
+            f"Auto : {self.hardware_profile.target_height}p · {self.hardware_profile.reason}"
+        )
         quality_box.append(quality)
         content.append(quality_box)
         error = Gtk.Label(label="", xalign=0, wrap=True, css_classes=["error"])
@@ -2272,9 +2497,11 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             if not is_youtube_url(uri):
                 error.set_text("Adresse YouTube invalide")
                 return
-            heights = (1080, 1440, 2160)
             dialog.close()
-            self.start_youtube_download(uri, heights[quality.get_selected()])
+            selected_height = QUALITY_CHOICES[quality.get_selected()][1]
+            self.start_youtube_download(
+                uri, requested_height(selected_height, self.hardware_profile)
+            )
 
         download.connect("clicked", start)
         url_entry.connect("activate", start)
@@ -2310,7 +2537,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         self.selected_label.set_text(self.selected.name)
         self.apply_button.set_sensitive(True)
         self.login_button.set_sensitive(True)
-        self.status.set_text(f"Vidéo YouTube prête : {self.selected.name}")
+        self.status.set_text(f"Média YouTube prêt : {self.selected.name}")
 
     def import_finished(self, dialog, result):
         try:
@@ -2341,6 +2568,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             "output": output,
             "volume": int(self.volume.get_value()),
             "speed": self.speeds[self.speed.get_selected()],
+            "fit_mode": self.fit_modes[self.fit.get_selected()],
             "loop": self.loop[1].get_active(),
             "hardware_decode": self.hardware[1].get_active(),
             "auto_pause": self.auto_pause[1].get_active(),
@@ -2371,7 +2599,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
         save_config(self.config)
         self.taste.reinforce(self.selected.stem, 3.0)
         self.apply_button.set_sensitive(False)
-        self.status.set_text("Application du fond vidéo…")
+        self.status.set_text("Application du fond…")
         self.run_controller("play")
 
     def stop_wallpaper(self, _button):
@@ -2386,11 +2614,18 @@ class MPVpaperWindow(Adw.ApplicationWindow):
 
         def worker():
             output = CACHE_DIR.parent / "login-background.jpeg"
-            extract = bounded_process(
-                ["ffmpegthumbnailer", "-i", str(self.selected), "-o", str(output),
-                 "-s", "1920", "-t", "20"],
-                timeout=120, capture_output=True, text=True,
-            )
+            if self.selected.suffix.casefold() in IMAGE_EXTENSIONS:
+                extract = bounded_process(
+                    ["ffmpeg", "-y", "-i", str(self.selected), "-frames:v", "1",
+                     "-vf", "scale='min(1920,iw)':-2", str(output)],
+                    timeout=120, capture_output=True, text=True,
+                )
+            else:
+                extract = bounded_process(
+                    ["ffmpegthumbnailer", "-i", str(self.selected), "-o", str(output),
+                     "-s", "1920", "-t", "20"],
+                    timeout=120, capture_output=True, text=True,
+                )
             if extract.returncode == 0:
                 result = subprocess.run(
                     [
@@ -2419,7 +2654,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
     def command_finished(self, action, result):
         self.apply_button.set_sensitive(self.selected is not None)
         if result.returncode == 0:
-            self.status.set_text("Fond vidéo actif sur " + self.config.get("output", "*") if action == "play" else "Fond vidéo arrêté")
+            self.status.set_text("Fond actif sur " + self.config.get("output", "*") if action == "play" else "Fond arrêté")
         else:
             message = result.stderr.strip() or "La commande a échoué"
             self.status.set_text(message)
@@ -2434,7 +2669,7 @@ class MPVpaperWindow(Adw.ApplicationWindow):
             count = state.partition(":")[2]
             self.status.set_text(f"Fonds actifs sur {count} écran(s)")
         else:
-            self.status.set_text("Aucun fond vidéo actif")
+            self.status.set_text("Aucun fond actif")
 
 
 class MPVpaperApplication(Adw.Application):

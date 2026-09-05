@@ -1,12 +1,14 @@
 import importlib.util
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest import mock
 
 
 MODULE_PATH = Path(__file__).parents[1] / "mpvpaper-enginectl.py"
+sys.path.insert(0, str(MODULE_PATH.parent))
 SPEC = importlib.util.spec_from_file_location("mpvpaper_enginectl", MODULE_PATH)
 CONTROLLER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CONTROLLER)
@@ -94,6 +96,22 @@ class ColorEngineTests(unittest.TestCase):
         self.assertIn("colortemperature=temperature=4500", options)
         self.assertIn("rm=0.25", options)
         self.assertIn("bm=-0.08", options)
+        self.assertIn("panscan=1.0", options)
+        self.assertIn("keepaspect=yes", options)
+        self.assertIn("terminal=no", options)
+
+    def test_contain_and_stretch_wallpaper_modes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(CONTROLLER, "RUNTIME_DIR", Path(directory)):
+                contain = CONTROLLER.mpv_options({
+                    **CONTROLLER.DEFAULT_CONFIG, "fit_mode": "contain",
+                })
+                stretch = CONTROLLER.mpv_options({
+                    **CONTROLLER.DEFAULT_CONFIG, "fit_mode": "stretch",
+                })
+        self.assertIn("panscan=0.0", contain)
+        self.assertIn("keepaspect=yes", contain)
+        self.assertIn("keepaspect=no", stretch)
 
     def test_apply_colors_uses_live_mpv_ipc(self):
         payloads = []

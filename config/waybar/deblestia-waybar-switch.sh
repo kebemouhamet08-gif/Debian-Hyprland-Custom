@@ -3,33 +3,66 @@
 set -euo pipefail
 
 waybar_dir="${XDG_CONFIG_HOME:-$HOME/.config}/waybar"
-variant="${1:-}"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/deblestia"
+state_file="$state_dir/ui-mode"
+mode="${1:-}"
 
-if [ -z "$variant" ]; then
-    variant="$(
-        printf '%s\n' 'Nova Lite · îlots horizontaux' 'Bar · barre verticale' |
-            rofi -dmenu -i -p 'Variante Deblestia' \
+if [ -z "$mode" ]; then
+    mode="$(
+        printf '%s\n' \
+            'Custom Debian V2 Immersive · Caelestia' \
+            'Nova 2 Waybar · îlots multi-écran' \
+            'Nova Shell Custom Debian · Quickshell' |
+            rofi -dmenu -i -p 'Deblestia UI' \
                 -theme "$HOME/.config/rofi/DebianGlass.rasi"
     )"
 fi
 
-case "$variant" in
-    nova|Nova*)
-        config_name='[Deblestia] Nova Lite'
-        style_name='[Deblestia] Nova Lite.css'
+case "$mode" in
+    debian-v2|Custom\ Debian\ V2*)
+        mode='debian-v2'
+        config_name=''
+        style_name=''
+        label='Custom Debian V2 Immersive'
         ;;
-    bar|Bar*)
-        config_name='[Deblestia] Bar'
-        style_name='[Deblestia] Bar.css'
+    nova2|Nova\ 2*)
+        mode='nova2'
+        config_name='[Deblestia] Nova 2'
+        style_name='[Deblestia] Nova 2.css'
+        label='Nova 2 Waybar'
+        ;;
+    nova-shell|Nova\ Shell*)
+        mode='nova-shell'
+        config_name=''
+        style_name=''
+        label='Nova Shell'
         ;;
     '') exit 0 ;;
     *)
-        printf 'Variante inconnue : %s\n' "$variant" >&2
+        printf 'Mode inconnu : %s\n' "$mode" >&2
         exit 2
         ;;
 esac
 
-ln -sfn "$waybar_dir/configs/$config_name" "$waybar_dir/config"
-ln -sfn "$waybar_dir/styles/$style_name" "$waybar_dir/style.css"
-"$HOME/.config/hypr/scripts/desktop-shell-mode.sh" "$config_name" &
-notify-send "Deblestia" "$config_name activé"
+if [ "$mode" = nova2 ]; then
+    [ -f "$waybar_dir/configs/$config_name" ] || {
+        printf 'Configuration absente : %s\n' "$config_name" >&2
+        exit 1
+    }
+    [ -f "$waybar_dir/styles/$style_name" ] || {
+        printf 'Style absent : %s\n' "$style_name" >&2
+        exit 1
+    }
+    ln -sfn "$waybar_dir/configs/$config_name" "$waybar_dir/config"
+    ln -sfn "$waybar_dir/styles/$style_name" "$waybar_dir/style.css"
+fi
+
+mkdir -p "$state_dir"
+temporary="$(mktemp "$state_dir/.ui-mode.XXXXXX")"
+trap 'rm -f "$temporary"' EXIT
+printf '%s\n' "$mode" >"$temporary"
+mv "$temporary" "$state_file"
+trap - EXIT
+
+"$HOME/.config/hypr/scripts/desktop-shell-mode.sh" "$mode" &
+notify-send "Deblestia UI" "$label activé"

@@ -40,7 +40,7 @@ diff --git a/modules/ii/bar/UtilButtons.qml b/modules/ii/bar/UtilButtons.qml
 -                iconText: "imagesmode"
 -                onClicked: GlobalStates.wallpaperSelectorOpen = !GlobalStates.wallpaperSelectorOpen
 +                iconText: "animated_images"
-+                onClicked: Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine-toggle`])
++                onClicked: Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine`])
 +                altAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-enginectl`, "random"])
 +                middleClickAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine`, "--colors"])
              }
@@ -49,7 +49,7 @@ diff --git a/modules/ii/bar/UtilButtons.qml b/modules/ii/bar/UtilButtons.qml
              id: legacyWallpaper
              CircleUtilButton {
 -                onClicked: GlobalStates.wallpaperSelectorOpen = !GlobalStates.wallpaperSelectorOpen
-+                onClicked: Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine-toggle`])
++                onClicked: Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine`])
 +                altAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-enginectl`, "random"])
 +                middleClickAction: () => Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine`, "--colors"])
                  MaterialSymbol {
@@ -69,7 +69,7 @@ diff --git a/modules/ii/wallpaperSelector/WallpaperSelectorContent.qml b/modules
 +                                IconToolbarButton {
 +                                    implicitWidth: height
 +                                    onClicked: {
-+                                        Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine-toggle`]);
++                                        Quickshell.execDetached([`${Directories.home}/.local/bin/mpvpaper-engine`]);
 +                                        GlobalStates.wallpaperSelectorOpen = false;
 +                                    }
 +                                    altAction: () => {

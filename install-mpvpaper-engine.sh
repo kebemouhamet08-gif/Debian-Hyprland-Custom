@@ -13,7 +13,7 @@ backup_dir="$HOME/.config/mpvpaper-engine-backup-$timestamp"
 
 check_dependencies() {
     local command_name failed=0
-    for command_name in mpvpaper ffmpeg ffmpegthumbnailer ffprobe python3 systemctl systemd-run hyprctl yt-dlp; do
+    for command_name in mpvpaper ffmpeg ffmpegthumbnailer ffprobe python3 systemctl systemd-run hyprctl; do
         if command -v "$command_name" >/dev/null 2>&1; then
             printf 'OK       %s\n' "$command_name"
         else
@@ -21,6 +21,16 @@ check_dependencies() {
             failed=1
         fi
     done
+    if command -v deno >/dev/null 2>&1 || [ -x "$HOME/.local/bin/deno" ]; then
+        printf 'OK       deno (défis JavaScript YouTube)\n'
+    else
+        printf 'RECOMMANDÉ deno (la méthode yt-dlp classique reste disponible)\n'
+    fi
+    if command -v steamcmd >/dev/null 2>&1; then
+        printf 'OK       steamcmd (import forcé Steam Workshop)\n'
+    else
+        printf 'OPTIONNEL steamcmd (sinon API Steam, contenu local ou aperçu)\n'
+    fi
 
     if python3 -c "import gi; gi.require_version('Adw', '1'); gi.require_version('Gtk', '4.0'); gi.require_version('WebKit', '6.0')" \
         2>/dev/null; then
@@ -47,6 +57,9 @@ check_dependencies
 mkdir -p "$backup_dir" "$install_dir" "$bin_dir" "$desktop_dir" "$systemd_dir"
 for path in "$install_dir" "$bin_dir/mpvpaper-engine" "$bin_dir/mpvpaper-enginectl" \
     "$bin_dir/mpvpaper-engine-toggle" \
+    "$bin_dir/mpvpaper-engine-waybar" \
+    "$bin_dir/mpvpaper-engine-quick-menu" \
+    "$bin_dir/mpvpaper-workshop" \
     "$desktop_dir/io.github.kebemouhamet08.MPVpaperEngine.desktop" \
     "$systemd_dir/mpvpaper-engine-prefetch.service" \
     "$systemd_dir/mpvpaper-engine-prefetch.timer"; do
@@ -55,9 +68,31 @@ for path in "$install_dir" "$bin_dir/mpvpaper-engine" "$bin_dir/mpvpaper-enginec
     fi
 done
 
+if [ "${MPVPAPER_ENGINE_SKIP_DOWNLOADER_SETUP:-0}" != 1 ]; then
+    printf 'Configuration de l’environnement yt-dlp privé…\n'
+    if python3 -m venv "$install_dir/.venv" \
+        && "$install_dir/.venv/bin/python" -m pip install -U pip \
+        && "$install_dir/.venv/bin/python" -m pip install -U --pre \
+            'yt-dlp[default,curl-cffi]' yt-dlp-ejs; then
+        printf 'OK       environnement yt-dlp privé\n'
+    else
+        printf 'AVERTISSEMENT environnement privé indisponible; yt-dlp utilisateur utilisé.\n' >&2
+    fi
+fi
+
 install -m 0755 "$source_dir/mpvpaper-engine.py" "$install_dir/mpvpaper-engine.py"
+install -m 0755 "$source_dir/mpvpaper-engine-v2.py" "$install_dir/mpvpaper-engine-v2.py"
+install -m 0755 "$source_dir/mpvpaper-engine-service.py" "$install_dir/mpvpaper-engine-service.py"
+install -m 0755 "$source_dir/mpvpaper-engine-launcher" "$install_dir/mpvpaper-engine-launcher"
+install -m 0755 "$source_dir/mpvpaper_download.py" "$install_dir/mpvpaper_download.py"
 install -m 0755 "$source_dir/mpvpaper-enginectl.py" "$install_dir/mpvpaper-enginectl.py"
 install -m 0755 "$source_dir/mpvpaper-engine-toggle" "$install_dir/mpvpaper-engine-toggle"
+install -m 0755 "$source_dir/mpvpaper-engine-waybar.py" "$install_dir/mpvpaper-engine-waybar.py"
+install -m 0755 "$source_dir/mpvpaper-engine-quick-menu" "$install_dir/mpvpaper-engine-quick-menu"
+mkdir -p "$install_dir/mpvpaper_engine"
+for module in "$source_dir"/mpvpaper_engine/*.py; do
+    install -m 0644 "$module" "$install_dir/mpvpaper_engine/$(basename "$module")"
+done
 install -m 0755 "$source_dir/install-sddm-background.sh" "$install_dir/install-sddm-background.sh"
 install -m 0644 "$source_dir/sddm-background.patch" "$install_dir/sddm-background.patch"
 install -m 0644 "$source_dir/io.github.kebemouhamet08.MPVpaperEngine.desktop" \
@@ -66,16 +101,24 @@ install -m 0644 "$source_dir/mpvpaper-engine-prefetch.service" \
     "$systemd_dir/mpvpaper-engine-prefetch.service"
 install -m 0644 "$source_dir/mpvpaper-engine-prefetch.timer" \
     "$systemd_dir/mpvpaper-engine-prefetch.timer"
-ln -sfn "$install_dir/mpvpaper-engine.py" "$bin_dir/mpvpaper-engine"
+install -m 0644 "$source_dir/mpvpaper-engine.service" \
+    "$systemd_dir/mpvpaper-engine.service"
+ln -sfn "$install_dir/mpvpaper-engine-launcher" "$bin_dir/mpvpaper-engine"
 ln -sfn "$install_dir/mpvpaper-enginectl.py" "$bin_dir/mpvpaper-enginectl"
 ln -sfn "$install_dir/mpvpaper-engine-toggle" "$bin_dir/mpvpaper-engine-toggle"
+ln -sfn "$install_dir/mpvpaper_download.py" "$bin_dir/mpvpaper-workshop"
+ln -sfn "$install_dir/mpvpaper-engine-waybar.py" "$bin_dir/mpvpaper-engine-waybar"
+ln -sfn "$install_dir/mpvpaper-engine-quick-menu" "$bin_dir/mpvpaper-engine-quick-menu"
 
 mkdir -p "$HOME/Pictures/Wallpapers/Live"
 update-desktop-database "$desktop_dir" 2>/dev/null || true
-systemctl --user daemon-reload
-systemctl --user disable mpvpaper-engine-prefetch.service >/dev/null 2>&1 || true
-systemctl --user enable --now mpvpaper-engine-prefetch.timer >/dev/null
-systemctl --user start --no-block mpvpaper-engine-prefetch.service || true
+if [ "${MPVPAPER_ENGINE_SKIP_SYSTEMD:-0}" != 1 ]; then
+    systemctl --user daemon-reload
+    systemctl --user enable --now mpvpaper-engine.service >/dev/null
+    systemctl --user disable mpvpaper-engine-prefetch.service >/dev/null 2>&1 || true
+    systemctl --user enable --now mpvpaper-engine-prefetch.timer >/dev/null
+    systemctl --user start --no-block mpvpaper-engine-prefetch.service || true
+fi
 
 printf 'MPVpaper Engine installé. Sauvegarde : %s\n' "$backup_dir"
 printf 'Lancez-le avec : %s\n' "$bin_dir/mpvpaper-engine"

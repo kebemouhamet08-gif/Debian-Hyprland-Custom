@@ -9,6 +9,8 @@ hypr_dir="$config_home/hypr"
 hypr_main="$hypr_dir/hyprland.conf"
 state_dir="$config_home/debian-immersive-v2"
 state_file="$state_dir/state"
+ui_state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/deblestia"
+ui_state_file="$ui_state_dir/ui-mode"
 history_file="$state_dir/history.log"
 backup_root="$config_home/debian-immersive-v2-backups"
 component_manifest="$repo_dir/config/v2/components.tsv"
@@ -17,6 +19,8 @@ theme_root="$config_home/debian-immersive-v2/themes"
 theme_override="$hypr_dir/debian-immersive-v2-theme.conf"
 source_line="source = $hypr_dir/caelestia-v2.conf"
 theme_source_line="source = $theme_override"
+ui_include="$hypr_dir/deblestia-ui.conf"
+ui_source_line="source = $ui_include"
 dry_run=0
 
 sources=(
@@ -25,6 +29,8 @@ sources=(
     "$repo_dir/config/hypr/scripts/caelestia-v2-launch.sh"
     "$repo_dir/config/hypr/scripts/caelestia-v2-lock.sh"
     "$repo_dir/config/hypr/scripts/caelestia-v2-display-profile.sh"
+    "$repo_dir/config/hypr/scripts/desktop-shell-mode.sh"
+    "$repo_dir/config/hypr/deblestia-ui.conf"
 )
 targets=(
     "$caelestia_dir/shell.json"
@@ -32,19 +38,21 @@ targets=(
     "$hypr_dir/scripts/caelestia-v2-launch.sh"
     "$hypr_dir/scripts/caelestia-v2-lock.sh"
     "$hypr_dir/scripts/caelestia-v2-display-profile.sh"
+    "$hypr_dir/scripts/desktop-shell-mode.sh"
+    "$ui_include"
 )
-modes=(0644 0644 0755 0755 0755)
+modes=(0644 0644 0755 0755 0755 0755 0644)
 
 usage() {
     cat <<'EOF'
-Usage : ./install-deblestia-shell.sh [check|install|status|restore|pam-fix|theme] [--dry-run] [sauvegarde]
+Usage : ./install-custom-debian-v2.sh [check|install|status|restore|pam-fix|theme] [--dry-run] [sauvegarde]
 
   check              vérifie les prérequis et les fichiers source
-  install            installe ou actualise Deblestia Shell (commande par défaut)
-  status             compare Deblestia Shell avec le dépôt
+  install            installe ou actualise Custom Debian V2 Immersive (commande par défaut)
+  status             compare Custom Debian V2 Immersive avec le dépôt
   restore [chemin]   restaure une sauvegarde, ou la dernière sauvegarde connue
   pam-fix            corrige l'authentification de l'écran verrouillé Caelestia sous Debian
-    theme list         affiche les thèmes HyDE suivis par Deblestia Shell
+    theme list         affiche les thèmes HyDE suivis par Custom Debian V2
     theme download ID  télécharge un thème, ou tous les thèmes avec ID=all
     theme apply ID     adapte et active un thème déjà téléchargé
   --dry-run           affiche les écritures prévues sans modifier le système
@@ -90,13 +98,13 @@ check_prerequisites() {
         fi
     done
     if [ -f "$component_manifest" ]; then
-        printf 'OK       manifeste des composants Deblestia Shell\n'
+        printf 'OK       manifeste des composants Custom Debian V2\n'
     else
         printf 'MANQUANT manifeste : %s\n' "$component_manifest" >&2
         failed=1
     fi
     if [ -f "$theme_manifest" ]; then
-        printf 'OK       catalogue des thèmes Deblestia Shell\n'
+        printf 'OK       catalogue des thèmes Custom Debian V2\n'
     else
         printf 'MANQUANT catalogue : %s\n' "$theme_manifest" >&2
         failed=1
@@ -104,7 +112,7 @@ check_prerequisites() {
     if [ -r "/run/faillock/$(id -un)" ] && [ -w "/run/faillock/$(id -un)" ]; then
         printf 'OK       PAM Caelestia (compteur faillock)\n'
     else
-        printf 'ATTENTION PAM Caelestia incomplet : exécutez ./install-deblestia-shell.sh pam-fix\n'
+        printf 'ATTENTION PAM Caelestia incomplet : exécutez ./install-custom-debian-v2.sh pam-fix\n'
     fi
     return "$failed"
 }
@@ -240,7 +248,7 @@ apply_theme() {
     else
         make_directory "$hypr_dir"
         {
-            printf '# Deblestia Shell — thème adapté depuis HyDE\n'
+            printf '# Custom Debian V2 — thème adapté depuis HyDE\n'
             printf '# Source : %s\n\n' "$id"
             printf 'general {\n'
             printf '    col.active_border = %s\n' "$active_border"
@@ -254,7 +262,7 @@ apply_theme() {
         if [ ! -f "$hypr_main" ]; then
             printf '%s\n' "$theme_source_line" >"$hypr_main"
         elif ! grep -Fqx "$theme_source_line" "$hypr_main"; then
-            printf '\n# Thème Deblestia Shell\n%s\n' "$theme_source_line" >>"$hypr_main"
+            printf '\n# Thème Custom Debian V2\n%s\n' "$theme_source_line" >>"$hypr_main"
         fi
         if command -v gsettings >/dev/null 2>&1; then
             if [ -n "$gtk_theme" ]; then
@@ -302,6 +310,7 @@ install_v2() {
     make_directory "$caelestia_dir"
     make_directory "$hypr_dir/scripts"
     make_directory "$state_dir"
+    make_directory "$ui_state_dir"
 
     for index in "${!targets[@]}"; do
         backup_target "${targets[$index]}" "$backup_dir" "component-$index"
@@ -318,15 +327,24 @@ install_v2() {
 
     if [ ! -f "$hypr_main" ]; then
         if ((dry_run)); then
-            log_action "créer $hypr_main avec l'inclusion Deblestia Shell"
+            log_action "créer $hypr_main avec l'inclusion Custom Debian V2"
         else
             printf '%s\n' "$source_line" >"$hypr_main"
         fi
     elif ! grep -Fqx "$source_line" "$hypr_main"; then
         if ((dry_run)); then
-            log_action "ajouter l'inclusion Deblestia Shell à $hypr_main"
+            log_action "ajouter l'inclusion Custom Debian V2 à $hypr_main"
         else
-            printf '\n# Deblestia Shell\n%s\n' "$source_line" >>"$hypr_main"
+            printf '\n# Custom Debian V2\n%s\n' "$source_line" >>"$hypr_main"
+        fi
+    fi
+
+    if ! grep -Fqx "$ui_source_line" "$hypr_main"; then
+        if ((dry_run)); then
+            log_action "ajouter le gestionnaire des interfaces à $hypr_main"
+        else
+            printf '\n# Gestionnaire des interfaces Deblestia\n%s\n' \
+                "$ui_source_line" >>"$hypr_main"
         fi
     fi
 
@@ -339,9 +357,10 @@ install_v2() {
         printf 'installed_at=%s\n' "$timestamp"
         printf 'last_backup=%s\n' "$backup_dir"
     } >"$state_file"
+    printf 'debian-v2\n' >"$ui_state_file"
     printf '%s\tinstall\t%s\n' "$timestamp" "$backup_dir" >>"$history_file"
     hyprctl reload >/dev/null 2>&1 || true
-    printf 'Deblestia Shell installé. Sauvegarde : %s\n' "$backup_dir"
+    printf 'Custom Debian V2 Immersive installé. Sauvegarde : %s\n' "$backup_dir"
     printf 'Relancez la session, ou exécutez : %s\n' "$hypr_dir/scripts/caelestia-v2-launch.sh"
 }
 
@@ -359,9 +378,9 @@ status_v2() {
         fi
     done
     if [ -f "$hypr_main" ] && grep -Fqx "$source_line" "$hypr_main"; then
-        printf 'OK       inclusion Hyprland Deblestia Shell\n'
+        printf 'OK       inclusion Hyprland Custom Debian V2\n'
     else
-        printf 'ABSENT   inclusion Hyprland Deblestia Shell\n'
+        printf 'ABSENT   inclusion Hyprland Custom Debian V2\n'
         differences=1
     fi
     if [ -f "$state_file" ]; then
@@ -381,7 +400,7 @@ restore_v2() {
         backup_dir="$(last_backup_from_state || true)"
     fi
     if [ -z "$backup_dir" ] || [ ! -f "$backup_dir/manifest.tsv" ]; then
-        printf 'Sauvegarde Deblestia Shell introuvable. Indiquez son chemin après restore.\n' >&2
+        printf 'Sauvegarde Custom Debian V2 introuvable. Indiquez son chemin après restore.\n' >&2
         return 1
     fi
     while IFS=$'\t' read -r status target relative; do
@@ -389,7 +408,7 @@ restore_v2() {
             if [ "$status" = present ]; then
                 log_action "restaurer $target depuis $backup_dir/$relative"
             else
-                log_action "retirer le fichier Deblestia Shell $target"
+                log_action "retirer le fichier Custom Debian V2 $target"
             fi
             continue
         fi

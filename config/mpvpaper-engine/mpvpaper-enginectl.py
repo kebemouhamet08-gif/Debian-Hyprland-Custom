@@ -10,7 +10,20 @@ import sys
 import re
 import secrets
 import socket
-import tempfile
+
+from mpvpaper_engine.config import (
+    COLOR_DEFAULTS,
+    LEGACY_DEFAULT_CONFIG,
+    bounded_number,
+    load_legacy_compatible_config,
+    normalize_legacy_profile,
+    save_legacy_config,
+    validate_output_name,
+)
+from mpvpaper_engine.ipc import EngineClient, EngineIPCError, EngineUnavailableError
+from mpvpaper_engine.library import Library
+from mpvpaper_engine.paths import EnginePaths
+from mpvpaper_engine.state import read_state, state_to_dict
 
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "mpvpaper-engine"
@@ -18,110 +31,185 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 UNIT_PREFIX = "mpvpaper-engine-wallpaper"
 LEGACY_UNIT = f"{UNIT_PREFIX}.service"
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/tmp/mpvpaper-engine-{os.getuid()}")) / "mpvpaper-engine"
-COLOR_DEFAULTS = {
-    "brightness": 0,
-    "contrast": 0,
-    "gamma": 0,
-    "saturation": 0,
-    "hue": 0,
-    "temperature": 6500,
-    "red_balance": 0,
-    "green_balance": 0,
-    "blue_balance": 0,
-}
-DEFAULT_CONFIG = {
-    "wallpaper": "",
-    "output": "*",
-    "volume": 0,
-    "speed": 1.0,
-    "loop": True,
-    "hardware_decode": True,
-    "auto_pause": True,
-    "autostart": True,
-    **COLOR_DEFAULTS,
-}
+DEFAULT_CONFIG = dict(LEGACY_DEFAULT_CONFIG)
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".avif", ".bmp"}
+MEDIA_EXTENSIONS = VIDEO_EXTENSIONS | IMAGE_EXTENSIONS
 WALLPAPER_DIRS = (
     Path.home() / "Pictures" / "Wallpapers" / "Live",
     Path.home() / "Pictures" / "wallpapers",
 )
 
 
-def bounded_number(value, default, minimum, maximum, number_type=int):
-    try:
-        parsed = number_type(value)
-    except (TypeError, ValueError, OverflowError):
-        return default
-    return max(minimum, min(maximum, parsed))
-
-
 def valid_output_name(value):
-    return isinstance(value, str) and bool(re.fullmatch(
-        r"(?:\*|[A-Za-z0-9][A-Za-z0-9_.-]{0,127})", value
-    ))
+    return validate_output_name(value)
 
 
 def normalize_profile(data, output="*"):
-    source = data if isinstance(data, dict) else {}
-    profile = dict(DEFAULT_CONFIG)
-    wallpaper = source.get("wallpaper", "")
-    profile["wallpaper"] = wallpaper if isinstance(wallpaper, str) else ""
-    requested_output = source.get("output", output)
-    profile["output"] = requested_output if valid_output_name(requested_output) else output
-    profile["volume"] = bounded_number(source.get("volume"), 0, 0, 100)
-    profile["speed"] = bounded_number(source.get("speed"), 1.0, 0.1, 5.0, float)
-    for key in ("loop", "hardware_decode", "auto_pause", "autostart"):
-        if isinstance(source.get(key), bool):
-            profile[key] = source[key]
-    for key in ("brightness", "contrast", "gamma", "saturation", "hue",
-                "red_balance", "green_balance", "blue_balance"):
-        profile[key] = bounded_number(source.get(key), COLOR_DEFAULTS[key], -100, 100)
-    profile["temperature"] = bounded_number(source.get("temperature"), 6500, 1000, 40000)
-    return profile
+    return normalize_legacy_profile(data, output)
 
 
 def load_config():
-    try:
-        data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        data = {}
-    config = normalize_profile(data)
-    assignments = data.get("assignments") if isinstance(data, dict) else None
-    config["assignments"] = {}
-    if isinstance(assignments, dict):
-        for output, assignment in assignments.items():
-            if not valid_output_name(output) or not isinstance(assignment, dict):
-                continue
-            profile = normalize_profile(assignment, output=output)
-            config["assignments"][output] = {
-                key: profile[key] for key in DEFAULT_CONFIG if key != "output"
-            }
-    elif config["wallpaper"]:
-        config["assignments"] = {}
-        config["assignments"][config["output"]] = {
-            key: config[key] for key in DEFAULT_CONFIG if key != "output"
-        }
-    return config
+    return load_legacy_compatible_config(CONFIG_FILE)
 
 
 def save_config(config):
-    CONFIG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-    CONFIG_DIR.chmod(0o700)
-    temporary = None
+    save_legacy_config(config, CONFIG_FILE)
+
+
+def _machine_state(state, ok=True, source="engine"):
+    return {
+        "ok": ok,
+        "service": state.get("service_status", "stopped"),
+        "source": source,
+        "mode": state.get("mode"),
+        "updated_at": state.get("updated_at"),
+        "outputs": [
+            {"output": output, **value}
+            for output, value in state.get("outputs", {}).items()
+        ],
+        "last_error": state.get("last_error"),
+    }
+
+
+def engine_readonly_action(action, output=None, json_output=False):
+    paths = EnginePaths.from_environment()
+    client = EngineClient(paths, timeout=0.75)
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=CONFIG_DIR, prefix=".config-", delete=False
-        ) as stream:
-            temporary = Path(stream.name)
-            json.dump(config, stream, indent=2)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        temporary.chmod(0o600)
-        os.replace(temporary, CONFIG_FILE)
-    finally:
-        if temporary is not None and temporary.exists():
-            temporary.unlink()
+        if action == "engine-ping":
+            result = client.ping()
+            payload = {"ok": True, "service": "running", **result}
+        else:
+            state = client.get_state()
+            if output:
+                current = client.get_output_state(output)
+                state = {**state, "outputs": {output: {
+                    key: value for key, value in current.items() if key != "output"
+                }}}
+            payload = _machine_state(state)
+    except EngineUnavailableError as error:
+        if action == "current":
+            payload = _machine_state(
+                state_to_dict(read_state(paths)), ok=False, source="snapshot"
+            )
+            payload["error"] = str(error)
+        else:
+            payload = {"ok": False, "service": "unavailable", "error": str(error)}
+        if json_output:
+            print(json.dumps(payload, separators=(",", ":")))
+        else:
+            print(f"mpvpaper-engine: {payload['error']}", file=sys.stderr)
+        return 3
+    except (EngineIPCError, TimeoutError) as error:
+        payload = {"ok": False, "service": "error", "error": str(error)}
+        if json_output:
+            print(json.dumps(payload, separators=(",", ":")))
+        else:
+            print(f"mpvpaper-engine: {error}", file=sys.stderr)
+        return 1
+
+    if json_output:
+        print(json.dumps(payload, separators=(",", ":")))
+    elif action == "engine-ping":
+        print("pong")
+    else:
+        print(f"{payload['service']}:{len(payload['outputs'])}")
+    return 0
+
+
+def library_list_action(json_output=False):
+    try:
+        items = Library().list()
+        payload = [{
+            "id": item.id, "title": item.title, "path": str(item.path),
+            "type": item.media_type.value, "width": item.width,
+            "height": item.height, "fps": item.fps, "duration": item.duration,
+            "favorite": item.favorite, "missing": item.missing,
+        } for item in items]
+    except (OSError, RuntimeError, ValueError) as error:
+        if json_output:
+            print(json.dumps({"ok": False, "error": str(error)}, separators=(",", ":")))
+        else:
+            print(f"mpvpaper-engine: {error}", file=sys.stderr)
+        return 1
+    if json_output:
+        print(json.dumps({"ok": True, "wallpapers": payload}, separators=(",", ":")))
+    else:
+        for item in payload:
+            print(f"{item['id']}\t{item['type']}\t{item['title']}\t{item['path']}")
+    return 0
+
+
+def engine_playback_action(
+    action, config, output=None, seconds=None, json_output=False, profile=None
+):
+    output = output or config.get("output", "*")
+    if not valid_output_name(output):
+        print("mpvpaper-engine: nom d’écran invalide", file=sys.stderr)
+        return 2
+    client = EngineClient(timeout=0.75)
+    try:
+        if action == "pause":
+            result = client.pause(output)
+        elif action == "resume":
+            result = client.resume(output)
+        elif action == "toggle":
+            result = client.toggle_pause(output)
+        elif action == "seek":
+            if seconds is None:
+                raise ValueError("--seconds est requis pour seek")
+            result = client.seek(output, seconds)
+        elif action == "restart":
+            result = client.restart(output)
+        elif action == "profile":
+            if profile not in {"auto", "eco", "balanced", "quality"}:
+                raise ValueError("--profile auto|eco|balanced|quality est requis")
+            result = client.set_performance_profile(output, profile)
+        else:
+            result = {"outputs": client.list_outputs()}
+        payload = {"ok": True, "source": "engine", "output": output, **result}
+    except EngineUnavailableError:
+        try:
+            if action in {"pause", "resume", "toggle"}:
+                paused = action == "pause"
+                if action == "toggle":
+                    paused = not bool(ipc_request(output, ["get_property", "pause"]).get("data"))
+                ipc_request(output, ["set_property", "pause", paused])
+                result = {"paused": paused}
+            elif action == "seek":
+                if seconds is None:
+                    raise ValueError("--seconds est requis pour seek")
+                ipc_request(output, ["seek", float(seconds), "absolute"])
+                result = {"position": float(seconds)}
+            elif action == "restart":
+                run(["systemctl", "--user", "restart", unit_for_output(output)], check=True)
+                result = {"restarted": True}
+            elif action == "profile":
+                raise RuntimeError("le profil nécessite le service Engine v2")
+            else:
+                result = {"outputs": sorted(config.get("assignments", {}))}
+            payload = {"ok": True, "source": "legacy", "output": output, **result}
+        except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
+            payload = {"ok": False, "source": "legacy", "error": str(error)}
+            if json_output:
+                print(json.dumps(payload, separators=(",", ":")))
+            else:
+                print(f"mpvpaper-engine: {error}", file=sys.stderr)
+            return 1
+    except (EngineIPCError, TimeoutError, ValueError) as error:
+        payload = {"ok": False, "source": "engine", "error": str(error)}
+        if json_output:
+            print(json.dumps(payload, separators=(",", ":")))
+        else:
+            print(f"mpvpaper-engine: {error}", file=sys.stderr)
+        return 1
+    if json_output:
+        print(json.dumps(payload, separators=(",", ":")))
+    elif action == "outputs":
+        print("\n".join(payload["outputs"]))
+    else:
+        print(json.dumps(result, separators=(",", ":")))
+    return 0
 
 
 def run(command, check=False):
@@ -359,7 +447,7 @@ def mpv_options(config):
     except FileNotFoundError:
         pass
     options = [
-        "load-scripts=no",
+        "load-scripts=no", "terminal=no",
         f"speed={config['speed']}",
         f"input-ipc-server={ipc_socket}",
         *(f"{name}={int(config.get(name, 0))}" for name in (
@@ -367,8 +455,15 @@ def mpv_options(config):
         )),
         f"vf={color_filter(config)}",
     ]
+    fit_options = {
+        "cover": ["video-unscaled=no", "keepaspect=yes", "panscan=1.0"],
+        "contain": ["video-unscaled=no", "keepaspect=yes", "panscan=0.0"],
+        "stretch": ["video-unscaled=no", "keepaspect=no", "panscan=0.0"],
+    }
+    options.extend(fit_options.get(config.get("fit_mode"), fit_options["cover"]))
     if config["loop"]:
         options.append("loop-file=inf")
+    options.extend(["image-display-duration=inf", "keep-open=yes"])
     if config["hardware_decode"]:
         options.append("hwdec=auto-safe")
     if int(config["volume"]) <= 0:
@@ -381,7 +476,7 @@ def mpv_options(config):
 def play(config):
     wallpaper = Path(config["wallpaper"]).expanduser()
     if not wallpaper.is_file():
-        raise SystemExit(f"Fond vidéo introuvable : {wallpaper}")
+        raise SystemExit(f"Fond introuvable : {wallpaper}")
     if not shutil.which("mpvpaper"):
         raise SystemExit("mpvpaper n'est pas installé")
 
@@ -410,7 +505,7 @@ def random_wallpapers():
         if not directory.is_dir():
             continue
         for path in directory.rglob("*"):
-            if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS:
+            if path.is_file() and path.suffix.lower() in MEDIA_EXTENSIONS:
                 resolved = path.resolve()
                 if resolved not in seen:
                     seen.add(resolved)
@@ -422,7 +517,7 @@ def play_random(config):
     wallpapers = random_wallpapers()
     if not wallpapers:
         locations = ", ".join(str(path) for path in WALLPAPER_DIRS)
-        raise SystemExit(f"Aucun fond vidéo trouvé dans : {locations}")
+        raise SystemExit(f"Aucun fond image ou vidéo trouvé dans : {locations}")
 
     current = Path(config.get("wallpaper", "")).expanduser()
     alternatives = [path for path in wallpapers if path != current]
@@ -447,13 +542,26 @@ def main():
     parser = argparse.ArgumentParser(description="Contrôleur de MPVpaper Engine")
     parser.add_argument("action", choices=(
         "play", "random", "stop", "restore", "status", "apply-colors", "preview-colors",
-        "capture", "adapt-theme",
+        "capture", "adapt-theme", "engine-ping", "current", "pause", "resume",
+        "toggle", "seek", "restart", "outputs",
+        "list", "profile",
     ))
     parser.add_argument("--output", default=None, help="écran ciblé pour les couleurs")
     parser.add_argument("--settings", default=None, help="réglages couleur JSON à prévisualiser")
     parser.add_argument("--wallpaper", default=None, help="fond vidéo choisi pour la palette")
+    parser.add_argument("--json", action="store_true", help="sortie JSON sans texte additionnel")
+    parser.add_argument("--seconds", type=float, default=None, help="position absolue en secondes")
+    parser.add_argument("--profile", default=None, help="profil auto, eco, balanced ou quality")
     args = parser.parse_args()
+    if args.action in {"engine-ping", "current", "status"}:
+        return engine_readonly_action(args.action, args.output, args.json)
+    if args.action == "list":
+        return library_list_action(args.json)
     config = load_config()
+    if args.action in {"pause", "resume", "toggle", "seek", "restart", "outputs", "profile"}:
+        return engine_playback_action(
+            args.action, config, args.output, args.seconds, args.json, args.profile
+        )
 
     if args.action == "play":
         play(config)

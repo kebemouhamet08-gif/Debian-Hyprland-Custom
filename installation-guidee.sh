@@ -9,10 +9,9 @@ usage() {
 Usage : ./installation-guidee.sh [composant]
 
 Composants :
-  deblestia-bar      barre Waybar verticale Deblestia Bar
-  deblestia-nova     shell Quickshell complet Deblestia Nova
-  deblestia-nova-lite barre Waybar légère inspirée de Nova
-  deblestia-shell    environnement Caelestia Deblestia Shell
+  custom-debian-v2   interface Caelestia Custom Debian V2 Immersive
+  deblestia-nova2    barre Waybar multi-écran Deblestia Nova 2
+  deblestia-nova-shell shell Quickshell Nova Shell Custom Debian
   mpvpaper-engine    fonds d'écran vidéo MPVpaper Engine
   periphx            centre de contrôle matériel PeriphX
   mirrorbridge       miroir Android et iPhone MirrorBridge
@@ -26,48 +25,41 @@ if [ -z "$component" ]; then
     cat <<'EOF'
 Installation guidée — Deblestia
 
-  1) Deblestia Bar
-  2) Deblestia Nova (shell complet)
-  3) Deblestia Shell
+  1) Custom Debian V2 Immersive (Caelestia)
+  2) Deblestia Nova 2 (Waybar multi-écran)
+  3) Nova Shell Custom Debian (Quickshell)
   4) MPVpaper Engine
   5) PeriphX
   6) MirrorBridge
-  7) Deblestia Nova Lite (Waybar)
   q) Quitter
 EOF
     read -r -p "Votre choix : " choice
     case "$choice" in
-        1) component=deblestia-bar ;;
-        2) component=deblestia-nova ;;
-        3) component=deblestia-shell ;;
+        1) component=custom-debian-v2 ;;
+        2) component=deblestia-nova2 ;;
+        3) component=deblestia-nova-shell ;;
         4) component=mpvpaper-engine ;;
         5) component=periphx ;;
         6) component=mirrorbridge ;;
-        7) component=deblestia-nova-lite ;;
         q|Q) exit 0 ;;
         *) printf 'Choix inconnu : %s\n' "$choice" >&2; exit 2 ;;
     esac
 fi
 
 case "$component" in
-    deblestia-bar|debian-glass)
-        name="Deblestia Bar"
-        installer="$repo_dir/install-deblestia-bar.sh"
+    deblestia-nova2)
+        name="Deblestia Nova 2"
+        installer="$repo_dir/install-deblestia-nova2.sh"
         check_command=("$installer" check)
         ;;
-    deblestia-nova)
-        name="Deblestia Nova"
-        installer="$repo_dir/install-deblestia-nova.sh"
+    deblestia-nova-shell)
+        name="Nova Shell Custom Debian"
+        installer="$repo_dir/install-deblestia-nova-shell.sh"
         check_command=("$installer" check)
         ;;
-    deblestia-nova-lite)
-        name="Deblestia Nova Lite"
-        installer="$repo_dir/install-deblestia-nova-lite.sh"
-        check_command=("$installer" check)
-        ;;
-    deblestia-shell|debian-immersive)
-        name="Deblestia Shell"
-        installer="$repo_dir/install-deblestia-shell.sh"
+    custom-debian-v2)
+        name="Custom Debian V2 Immersive"
+        installer="$repo_dir/install-custom-debian-v2.sh"
         check_command=("$installer" check)
         ;;
     mpvpaper-engine)

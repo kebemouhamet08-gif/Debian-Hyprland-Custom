@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+choice="$(printf '%s\n' 'Pause/Reprendre' 'Précédent' 'Suivant' 'Aléatoire' 'Profil ECO' 'Profil BALANCED' 'Profil QUALITY' 'Synchronisation thème' 'Ouvrir la bibliothèque' | rofi -dmenu -i -p 'MPVpaper')"
+case "$choice" in
+    'Pause/Reprendre') mpvpaper-enginectl toggle ;;
+    'Précédent') mpvpaper-enginectl seek --seconds 0 ;;
+    'Suivant'|'Aléatoire') mpvpaper-enginectl random ;;
+    'Profil ECO') mpvpaper-enginectl profile --profile eco ;;
+    'Profil BALANCED') mpvpaper-enginectl profile --profile balanced ;;
+    'Profil QUALITY') mpvpaper-enginectl profile --profile quality ;;
+    'Synchronisation thème') mpvpaper-enginectl adapt-theme ;;
+    'Ouvrir la bibliothèque') mpvpaper-engine ;;
+esac

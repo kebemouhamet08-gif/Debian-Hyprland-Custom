@@ -1,9 +1,8 @@
 # Deblestia — Debian × Caelestia
 
-Ce dépôt regroupe plusieurs composants indépendants. Ils sont présentés par leur
-nom dans ce guide : **Deblestia Bar**, **Deblestia Nova**, **Deblestia Nova Lite**, **Deblestia Shell**,
-**MPVpaper Engine**, **PeriphX** et **MirrorBridge**. Les commandes historiques restent disponibles
-comme alias techniques afin de préserver les installations existantes.
+Ce dépôt conserve trois interfaces : **Custom Debian V2 Immersive**,
+**Deblestia Nova 2** et **Nova Shell Custom Debian**. MPVpaper Engine, PeriphX et
+MirrorBridge restent des composants indépendants, sans constituer des modes UI.
 
 ## Installation guidée
 
@@ -28,43 +27,45 @@ Git. Il télécharge le script racine et uniquement la partie de `config/` néce
 Exécutez un bloc à la fois depuis le dossier dans lequel vous souhaitez conserver
 les sources.
 
-### Deblestia Bar
+### Deblestia Nova 2
+
+Nova 2 est la barre Waybar horizontale multi-écran. Elle affecte les bureaux
+1–10 à `eDP-1` et 11–20 à `HDMI-A-1`, sans modifier la résolution ni la
+position des sorties.
 
 ```bash
-git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git deblestia-bar
-cd deblestia-bar
-git sparse-checkout set config/waybar config/hypr
-./install-deblestia-bar.sh
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git deblestia-nova2
+cd deblestia-nova2
+git sparse-checkout set config/waybar config/hypr docs
+./install-deblestia-nova2.sh check
+./install-deblestia-nova2.sh install
 ```
 
-### Deblestia Nova
+Le bouton Debian permet ensuite de choisir entre Custom Debian V2 Immersive,
+Nova 2 Waybar et Nova Shell Custom Debian.
+
+Le raccourci `Super+Alt+B` (Win+Alt+B) active directement Custom Debian V2
+Immersive et le mémorise pour la prochaine connexion.
+
+### Nova Shell Custom Debian
 
 ```bash
-git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git deblestia-nova
-cd deblestia-nova
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git deblestia-nova-shell
+cd deblestia-nova-shell
 git sparse-checkout set config/nova-shell config/hypr
-./install-deblestia-nova.sh check
-./install-deblestia-nova.sh install
-./install-deblestia-nova.sh launch
+./install-deblestia-nova-shell.sh check
+./install-deblestia-nova-shell.sh install
+./install-deblestia-nova-shell.sh launch
 ```
 
-### Deblestia Nova Lite
+### Custom Debian V2 Immersive
 
 ```bash
-git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git deblestia-nova-lite
-cd deblestia-nova-lite
-git sparse-checkout set config/waybar config/hypr
-./install-deblestia-nova-lite.sh
-```
-
-### Deblestia Shell
-
-```bash
-git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git deblestia-shell
-cd deblestia-shell
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git custom-debian-v2
+cd custom-debian-v2
 git sparse-checkout set config/caelestia config/hypr config/v2
-./install-deblestia-shell.sh check
-./install-deblestia-shell.sh install
+./install-custom-debian-v2.sh check
+./install-custom-debian-v2.sh install
 ```
 
 ### MPVpaper Engine
@@ -133,14 +134,14 @@ téléphone. Sur iPhone, ouvrez **Centre de contrôle → Recopie de l’écran*
 sélectionnez **MirrorBridge**. Les commandes `adb`, `scrcpy`, `uxplay` et le
 service `avahi-daemon` fournissent les backends système nécessaires.
 
-## Deblestia Shell — environnement Caelestia
+## Custom Debian V2 Immersive — environnement Caelestia
 
-Dans son propre profil, Deblestia Shell utilise [Caelestia Shell](https://github.com/caelestia-dots/shell)
+Dans son propre profil, Custom Debian V2 Immersive utilise [Caelestia Shell](https://github.com/caelestia-dots/shell)
 à la place de Waybar,
 une interface Quickshell fluide avec lanceur, tableau de bord, visualiseur audio,
-fond dynamique et panneaux translucides. Elle est indépendante de
-Deblestia Bar : aucun composant ne remplace l'autre et l'utilisateur installe
-uniquement les expériences qu'il souhaite conserver.
+fond dynamique et panneaux translucides. Elle coexiste avec Nova 2 et Nova Shell
+Custom Debian ; le gestionnaire de modes évite de lancer plusieurs interfaces à
+la fois.
 
 ### Vidéo Debian Glass Immersive v2
 
@@ -148,21 +149,21 @@ uniquement les expériences qu'il souhaite conserver.
 
 ▶️ Voir la vidéo : https://youtu.be/tgntfMrhgew
 
-Deblestia Shell adopte aussi progressivement certains concepts de
+Custom Debian V2 Immersive adopte aussi progressivement certains concepts de
 [HyDE](https://github.com/HyDE-Project/HyDE) : installation modulaire, thèmes
 interchangeables, couleurs dynamiques, sélecteurs et profils. Leur adaptation à
 Debian est découpée en étapes vérifiables dans la
-[feuille de route Deblestia Shell](docs/V2-ROADMAP.md) ; l'installateur Arch de HyDE n'est pas
+[feuille de route Custom Debian V2](docs/V2-ROADMAP.md) ; l'installateur Arch de HyDE n'est pas
 utilisé directement.
 
-Le catalogue des thèmes officiels HyDE suivis par Deblestia Shell se trouve dans
+Le catalogue des thèmes officiels HyDE suivis par Custom Debian V2 se trouve dans
 `config/v2/themes.tsv`. Il référence les branches de
 [hyde-themes](https://github.com/HyDE-Project/hyde-themes), sans importer leur
-installateur Arch. Chaque thème devra être adapté au format Deblestia Shell avant son
+installateur Arch. Chaque thème devra être adapté au format Custom Debian V2 avant son
 activation : Hyprland, GTK, Caelestia/Waybar, icônes, polices et fonds restent
-isolés dans le profil Deblestia Shell et sont restaurables.
+isolés dans le profil Custom Debian V2 et sont restaurables.
 
-### Prérequis de Deblestia Shell
+### Prérequis de Custom Debian V2 Immersive
 
 - une session Hyprland fonctionnelle ;
 - `caelestia-cli` ;
@@ -173,15 +174,15 @@ isolés dans le profil Deblestia Shell et sont restaurables.
 
 Caelestia est principalement empaqueté pour Arch et Nix. Sous Debian, compilez
 Quickshell git et Caelestia selon leurs documentations officielles ;
-`install-deblestia-shell.sh` s'arrête proprement si les deux commandes indispensables ne sont
+`install-custom-debian-v2.sh` s'arrête proprement si les deux commandes indispensables ne sont
 pas disponibles.
 
 ```bash
-./install-deblestia-shell.sh check
-./install-deblestia-shell.sh install
+./install-custom-debian-v2.sh check
+./install-custom-debian-v2.sh install
 ```
 
-L'installateur Deblestia Shell est indépendant et propose aussi `status`,
+L'installateur Custom Debian V2 Immersive est indépendant et propose aussi `status`,
 `restore` et le mode `--dry-run`. Sans argument, il reste équivalent à `install`.
 
 L'installateur sauvegarde les fichiers concernés dans
@@ -218,7 +219,7 @@ affichée à tort comme un mot de passe incorrect. La commande suivante installe
 le compteur persistant attendu, sans modifier le mot de passe :
 
 ```bash
-./install-deblestia-shell.sh pam-fix
+./install-custom-debian-v2.sh pam-fix
 ```
 
 La commande demande les droits administrateur uniquement pour créer la règle
@@ -227,19 +228,62 @@ automatiquement à chaque démarrage.
 
 ### Profil d'affichage OLED
 
-Le profil Deblestia Shell applique au démarrage une température neutre de 6500 K et un gamma
+Le profil Custom Debian V2 Immersive applique au démarrage une température neutre de 6500 K et un gamma
 prononcé de 70 % avec `hyprsunset`. Le raccourci `Super+Shift+O` bascule entre ce
 rendu plus sombre et les couleurs neutres. Les valeurs peuvent être ajustées avec
 `CAELESTIA_DISPLAY_GAMMA` et `CAELESTIA_DISPLAY_TEMPERATURE`.
 
 ## MPVpaper Engine — fonds d'écran vidéo
 
-Une interface GTK 4 permet de gérer les fonds d'écran vidéo avec miniatures,
+MPVpaper Engine 2 ajoute un Core local indépendant de la fenêtre. La nouvelle GUI
+GTK4/libadwaita s’ouvre avec `mpvpaper-engine`; fermer la fenêtre ne coupe donc pas
+les wallpapers. La navigation regroupe Bibliothèque, Découvrir, Favoris, Playlists,
+Récents, Écrans et Réglages. L’inspecteur permet d’appliquer un média sur `eDP-1`,
+`HDMI-A-1` ou tous les écrans, puis de piloter pause, volume, mute, vitesse, boucle,
+couleurs et profil de performance en direct.
+
+Les profils disponibles sont `AUTO`, `ECO`, `BALANCED` et `QUALITY`. `AUTO` choisit
+un réglage explicable selon CPU, RAM, GPU, batterie, nombre de pixels et média;
+`ECO` limite les previews et vise 24 FPS/720p, tandis que `BALANCED` vise
+30 FPS/1080p. La bibliothèque SQLite conserve favoris, historique, fichiers manquants
+et playlists (`sequential`, `shuffle`, `smart`) sans mélanger la base de suggestions.
+
+Commandes utiles :
+
+```bash
+mpvpaper-enginectl status --json
+mpvpaper-enginectl current --output eDP-1 --json
+mpvpaper-enginectl outputs --json
+mpvpaper-enginectl list --json
+mpvpaper-enginectl pause --output eDP-1
+mpvpaper-enginectl resume --output eDP-1
+mpvpaper-enginectl profile --output eDP-1 --profile eco
+MPVPAPER_ENGINE_DEBUG=1 mpvpaper-engine
+```
+
+La synchronisation de thème propose `off`, `on_apply` et `always`. Elle analyse une
+image ou jusqu’à quatre frames vidéo (deux en ECO), puis isole les échecs Waybar,
+Nova Shell et Wallust. Une garde persistante empêche les boucles wallpaper/thème.
+Waybar reçoit un JSON stable avec wallpaper, écran, état et profil; clic gauche ouvre
+la bibliothèque, clic milieu pause/reprend, clic droit ouvre le menu rapide.
+
+En cas de diagnostic, les logs tournants sont sous
+`~/.cache/mpvpaper-engine/logs/` (5 MiB, trois sauvegardes). Les wallpapers restent
+actifs si le Core ou la GUI s’arrête. Pour revenir temporairement à l’interface
+historique complète, utilisez `mpvpaper-engine --legacy`; les actions de couleurs et
+de préchargement y sont automatiquement redirigées pendant la transition.
+
+Une interface GTK 4 permet de gérer les fonds d'écran image et vidéo avec miniatures,
 recherche, import, choix du moniteur, volume, vitesse, décodage matériel et pause
 automatique en plein écran. L'onglet **Découvrir** intègre MotionBGS, MoeWalls et
 VSThemes avec navigation et téléchargement direct dans la bibliothèque, grâce à
 WebKitGTK 6.0. Les liens ouverts dans une nouvelle fenêtre restent dans l'application
-et le bouton de téléchargement utilise `yt-dlp` pour extraire la vidéo de la page.
+et le bouton de téléchargement choisit l’image ou la vidéo la mieux adaptée à
+la résolution demandée.
+La bibliothèque peut afficher **Tous les médias**, uniquement les **Vidéos** ou
+uniquement les **Images**, avec un compteur séparé. Le bouton **Mettre à la
+corbeille** demande confirmation, refuse de retirer un fond encore assigné à un
+écran et conserve la possibilité de restaurer le fichier depuis la corbeille.
 L'onglet **Suggestions** utilise un graphe d'affinité SQLite local inspiré de Pinterest :
 les visites, téléchargements et applications renforcent les tags correspondants,
 puis les résultats sont classés et diversifiés à la demande, sans démon d'analyse.
@@ -251,14 +295,21 @@ faible poids initial laisse rapidement place aux goûts réels.
 Deux vidéos populaires de la chaîne YouTube TeshiiSan sont également proposées par
 défaut. Leur note publique combine la portée logarithmique des vues à 60 % et le taux
 de J’aime à 40 % ; les compteurs utilisés sont affichés directement sur chaque carte.
-Les projets Steam de type `Scene` ou `Web` nécessitent Wallpaper Engine/Steam ; les
-éléments de type `Video` ne sont importables que si Steam expose un fichier accessible.
+Pour Steam Workshop, le bouton tente successivement le contenu local déjà abonné,
+l’API publique Steam, puis un téléchargement forcé avec `steamcmd ... validate`.
+Les projets `Scene` ou `Web` que MPVpaper ne sait pas exécuter peuvent utiliser leur
+aperçu Steam seulement si sa définition est suffisante. Les miniatures de fiche
+(par exemple 224×224) sont refusées afin de ne jamais les présenter comme du 4K.
+Les projets `Video` et les images sont importés directement lorsque Steam expose le
+fichier ou que le contenu abonné est déjà présent localement.
 Le navigateur intégré active par défaut un bloqueur de publicités : règles réseau pour
 les régies connues, masquage des emplacements publicitaires et refus des fenêtres
 surgissantes automatiques. Le bouton bouclier permet de désactiver temporairement la
 protection lorsqu'un site en a besoin.
-Le bouton vidéo de la barre principale importe aussi une URL YouTube en `1080p`,
-`1440p` ou `2160p`. `yt-dlp` télécharge et remuxe la meilleure piste disponible en
+Le bouton vidéo de la barre principale importe aussi une URL YouTube en mode
+automatique, `1080p`, `1440p`, `2160p (4K)` ou `4320p (8K)`. Le mode automatique
+analyse la résolution des écrans, la RAM et le GPU afin d’éviter une qualité trop
+lourde pour la machine. `yt-dlp` télécharge et remuxe la meilleure piste disponible en
 MP4, l'ajoute à la bibliothèque et la sélectionne pour l'écran choisi. L'utilisateur
 doit disposer des droits nécessaires sur la vidéo importée.
 MPVpaper Engine privilégie `~/.local/bin/yt-dlp` lorsqu'il existe, car la version
@@ -304,14 +355,18 @@ ne la fournit pas, suivez la procédure de compilation du
 4. Dans **Couleurs**, sélectionnez l'écran, essayez un profil rapide ou déplacez
    les curseurs. Cliquez sur **Appliquer** pour conserver le rendu, ou sur
    **Annuler** pour revenir au profil précédent.
+   **Adaptation à l'écran** propose **Remplir** (plein écran avec recadrage,
+   valeur par défaut), **Contenir** (image entière avec bandes) et **Étirer**.
 5. Le bouton **+** importe une ou plusieurs vidéos déjà présentes sur le disque.
    Le bouton vidéo accepte une adresse YouTube : collez l'URL, choisissez
-   `1080p`, `1440p` ou `2160p (4K)`, puis cliquez sur **Télécharger**. La vidéo
+   automatique, `1080p`, `1440p`, `2160p (4K)` ou `4320p (8K)`, puis cliquez sur
+   **Télécharger**. Le média
    téléchargée rejoint automatiquement la bibliothèque.
 6. Dans **Découvrir**, choisissez Steam Workshop, YouTube TeshiiSan, MotionBGS,
    MoeWalls ou VSThemes. Utilisez les flèches pour naviguer, le bouclier pour
    activer ou désactiver le bloqueur de publicités et le bouton de téléchargement
-   pour importer la vidéo de la page affichée.
+   pour importer le média de la page affichée. Sur une fiche Steam Workshop, ce
+   bouton déclenche automatiquement la chaîne d’import forcé.
 7. Dans **Suggestions**, cliquez sur **Ouvrir** pour consulter une proposition
    dans Découvrir ou sur le cœur pour renforcer ce type de contenu. Le bouton
    d'actualisation recalcule le fil à partir des visites, téléchargements,
@@ -340,6 +395,21 @@ Les miniatures peuvent prendre quelques secondes à apparaître lors de la premi
 ouverture. Un téléchargement qui échoue peut provenir d'un site ayant changé son
 format ou d'une version trop ancienne de `yt-dlp`; l'application privilégie donc
 automatiquement `~/.local/bin/yt-dlp` lorsqu'il est installé.
+
+L’import Steam peut aussi être forcé en ligne de commande. `--profile` affiche la
+qualité automatique retenue pour la machine :
+
+```bash
+mpvpaper-workshop --profile
+mpvpaper-workshop --quality auto \
+  'https://steamcommunity.com/sharedfiles/filedetails/?id=2704773569'
+mpvpaper-workshop --quality 4320 'URL_STEAM_WORKSHOP'
+```
+
+`steamcmd` reste optionnel : sans lui, le moteur utilise le contenu Steam local,
+l’URL publique éventuellement fournie par l’API, puis un aperçu statique assez grand.
+Si Steam ne publie qu’une miniature, le projet complet exige un compte Steam ayant
+accès au contenu via Steam/Wallpaper Engine ou un `steamcmd` authentifié.
 Les suggestions fonctionnent comme un flux renouvelé : les cartes sont tirées au
 hasard selon leur note et vos préférences, et les résultats venant d'être affichés
 sont exclus avant le tirage. SQLite mémorise durablement leur empreinte : une image
@@ -400,7 +470,7 @@ SDDM ne prenant pas en charge `mpvpaper`, l'écran de connexion reste une image 
 
 PeriphX est préparé comme un composant indépendant. Son manifeste se
 trouve dans `config/v3/components.tsv` et sa feuille de route dans
-`docs/V3-ROADMAP.md`. Il ne modifie ni Deblestia Bar ni Deblestia Shell.
+`docs/V3-ROADMAP.md`. Il ne modifie aucune des trois interfaces conservées.
 
 Installez le centre de contrôle matériel avec :
 
@@ -453,9 +523,9 @@ Son pilote HID générique décode chaque interface et son descripteur, calcule 
 empreinte SHA-256 et reste strictement en lecture seule tant qu'aucun pilote validé
 n'est associé au VID/PID concerné.
 
-## Deblestia Nova — shell Quickshell complet
+## Nova Shell Custom Debian — shell Quickshell complet
 
-Deblestia Nova est désormais l'expérience complète inspirée de
+Nova Shell Custom Debian est l'expérience complète inspirée de
 [end4-pC](https://github.com/pctrade/end4-pC) : barre Material Expressive,
 panneaux latéraux, lanceur/recherche, aperçu des bureaux, notifications, réglages,
 dock, widgets de bureau, OSD, sélecteur de fond d'écran et menu de session. Le code
@@ -469,10 +539,10 @@ et trays existants tant que l'utilisateur ne choisit pas de les arrêter. Le
 verrouillage `Super+L` utilise Hyprlock installé par Debian afin d'éviter les
 incompatibilités PAM déjà rencontrées.
 
-L'installation désactive l'ancien `caelestia-v2.conf` et ajoute le profil
-`[Deblestia] Nova` au sélecteur des barres. Ce profil active exclusivement le
-shell Quickshell complet : barre supérieure avec lecteur, horloge analogique sur
-le bureau et dock/menu d'applications permanent en bas. Choisir une autre Waybar
+L'installation désactive l'ancien `caelestia-v2.conf` et rend Nova Shell disponible
+dans le sélecteur Deblestia UI. Ce mode active exclusivement le shell Quickshell
+complet : barre supérieure avec lecteur, horloge analogique sur le bureau et
+dock/menu d'applications permanent en bas. Choisir une interface Waybar
 arrête ensemble ces trois éléments Nova avant de lancer la barre sélectionnée ;
 `no panel` arrête les deux systèmes. La restauration remet la configuration
 Hyprland sauvegardée.
@@ -492,17 +562,17 @@ sudo apt install git python3 jq curl fish cava brightnessctl ddcutil \
 
 git clone --depth 1 https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git
 cd Debian-Hyprland-Custom
-./install-deblestia-nova.sh check
-./install-deblestia-nova.sh install
-./install-deblestia-nova.sh launch
+./install-deblestia-nova-shell.sh check
+./install-deblestia-nova-shell.sh install
+./install-deblestia-nova-shell.sh launch
 ```
 
 Les commandes de maintenance sont :
 
 ```bash
-./install-deblestia-nova.sh status
-./install-deblestia-nova.sh update
-./install-deblestia-nova.sh restore
+./install-deblestia-nova-shell.sh status
+./install-deblestia-nova-shell.sh update
+./install-deblestia-nova-shell.sh restore
 ```
 
 `install` et `update` créent une sauvegarde dans
@@ -530,109 +600,6 @@ correspondant ; le backend utilise les commandes IPC compatibles avec Hyprland 0
 Les profils Waybar fournis synchronisent également leur fond, leur accent et leur
 texte avec la palette Wallust du fond d'écran courant via
 `WaybarWallpaperSync.sh`.
-
-## Deblestia Nova Lite — Waybar en îlots
-
-Deblestia Nova Lite est une barre Waybar horizontale qui reprend l'organisation
-de la barre Nova/Quickshell. Elle utilise une palette sombre et neutre, sans ombre
-colorée, rail latéral ni barre inférieure. Le profil apparaît sous le nom
-`[Deblestia] Nova Lite`. Comme toute autre Waybar, sa sélection arrête complètement
-le shell Nova afin d'éviter les doubles barres et les réservations invisibles.
-
-Le profil `[CUSTOM] Debian Glass` utilise lui aussi une disposition supérieure
-complète et conserve ses fonctions historiques : lecteur, applications, bureaux,
-restauration des fenêtres réduites, météo, état système et contrôles de session.
-Son lecteur central adopte une capsule inspirée de Spotify avec visualisation
-audio CAVA, métadonnées MPRIS et commandes précédent, lecture/pause et suivant.
-
-Nova Lite est le profil Waybar sélectionné par défaut par `install.sh`. Deblestia Bar
-reste disponible avec `install-deblestia-bar.sh` ou avec le sélecteur de profil.
-
-Fonctions supplémentaires de Nova Lite :
-
-- fenêtre active, lanceurs rapides et bureaux avec icônes d'applications ;
-- lecteur MPRIS complet et panneau multimédia GTK ;
-- tiroirs extensibles pour CPU, mémoire, température, disque et outils ;
-- volume et luminosité réglables à la molette ;
-- état réseau, Bluetooth, batterie et profil d'énergie ;
-- indicateurs de confidentialité pour le microphone, la caméra et le partage ;
-- historique du presse-papiers, capture de zone et pipette couleur ;
-- palettes Rose, Tokyo, Nord, Gruvbox, Mono et couleurs du fond d'écran ;
-- notifications, veille, mises à jour APT, tray et panneau d'alimentation ;
-- centre Focus inspiré de l'approche modulaire d'end4-pC : Pomodoro persistant,
-  pauses courtes/longues et notes locales ;
-- accès direct et discret à MPVpaper Engine dans le groupe des lanceurs.
-
-Les commandes enrichies utilisent, lorsqu'elles sont installées, `brightnessctl`,
-`cliphist`, `grim`, `hyprpicker`, `powerprofilesctl`, `slurp`, `swaync-client` et
-`wl-copy`. Leur absence désactive uniquement le bouton concerné.
-
-Le bouton palette du tiroir d'outils applique les couleurs sans redémarrer la
-session. La commande équivalente accepte `rose`, `tokyo`, `nord`, `gruvbox`,
-`mono` ou `wallpaper` :
-
-```bash
-~/.config/waybar/deblestia-theme.sh tokyo
-```
-
-```bash
-./install-deblestia-nova-lite.sh check
-./install-deblestia-nova-lite.sh
-```
-
-Après installation, un clic droit sur le logo Debian permet de basculer entre
-Nova Lite et Bar. La même action est disponible en ligne de commande :
-
-```bash
-~/.config/waybar/deblestia-waybar-switch.sh nova
-~/.config/waybar/deblestia-waybar-switch.sh bar
-```
-
-## Deblestia Bar — barre Waybar verticale
-
-Une surcouche réutilisable pour les dotfiles
-[KooL Hyprland](https://github.com/JaKooLit/Hyprland-Dots), pensée pour Debian.
-
-### Fonctionnalités
-
-- barre Waybar « Deblestia Bar » verticale et flottante sur le côté gauche,
-  inspirée de Caelestia ;
-- bureaux avec icônes des applications ouvertes ;
-- mini-lecteur MPRIS inspiré de Spotify ;
-- lecteur multimédia compact adapté à la barre latérale ;
-- commandes précédent, lecture/pause et suivant ;
-- panneau multimédia GTK avec volume et sortie audio ;
-- raccourci MPVpaper intégré à la barre principale, sans barre flottante séparée ;
-- couleurs pilotées par `panel-colors.css`.
-
-### Installation
-
-Cette configuration suppose une session Hyprland et les dotfiles KooL déjà
-installés. Elle nécessite notamment `waybar`, `playerctl`, `cava`, `jq`,
-`python3-gi`, `python3-gi-cairo`, `gir1.2-gtk-3.0`, `wireplumber`, `pulseaudio-utils`,
-`rofi`, `kitty` et `btop`.
-
-```bash
-sudo apt update
-sudo apt install waybar playerctl cava jq python3 python3-gi python3-gi-cairo gir1.2-gtk-3.0 wireplumber pulseaudio-utils rofi kitty btop
-```
-
-```bash
-git clone --depth 1 https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git
-cd Debian-Hyprland-Custom
-./install-deblestia-bar.sh check
-./install-deblestia-bar.sh
-```
-
-L’installateur sauvegarde la configuration Waybar active avant de poser les
-fichiers. Déconnectez-vous puis reconnectez-vous si Waybar ne se recharge pas.
-
-### Commandes du lecteur
-
-- clic sur le titre : ouvre le panneau multimédia ;
-- clic du milieu sur le titre : lecture/pause ;
-- clic droit sur le titre : titre suivant ;
-- boutons dédiés : précédent, lecture/pause et suivant.
 
 ## Crédits
 

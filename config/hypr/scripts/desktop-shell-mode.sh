@@ -3,9 +3,10 @@
 # Sélection exclusive entre Deblestia Nova, Caelestia et Waybar.
 set -u
 
-active_layout="$(basename "$(readlink -f "$HOME/.config/waybar/config")")"
-layout="${1:-$active_layout}"
-nova_layout="[Deblestia] Nova"
+active_layout="$(basename "$(readlink -f "$HOME/.config/waybar/config")" 2>/dev/null || true)"
+state_file="${XDG_STATE_HOME:-$HOME/.local/state}/deblestia/ui-mode"
+layout="${1:-}"
+[ -n "$layout" ] || layout="$(cat "$state_file" 2>/dev/null || printf '%s' "$active_layout")"
 v2_layout="[CUSTOM] Debian Glass V2 - Immersive"
 suite="$HOME/.config/waybar/debian-glass-suite.sh"
 caelestia_launcher="$HOME/.config/hypr/scripts/caelestia-v2-launch.sh"
@@ -72,7 +73,27 @@ suite_off() {
     fi
 }
 
-if [ "$layout" = "$nova_layout" ]; then
+case "$layout" in
+    debian-v2|'[CUSTOM] Debian Glass V2 - Immersive') mode="$v2_layout" ;;
+    nova2|'[Deblestia] Nova 2') mode='nova2' ;;
+    nova-shell) mode='nova-shell' ;;
+    *) mode="$layout" ;;
+esac
+
+# Un changement explicite devient le mode restauré à la prochaine connexion.
+if [ -n "${1:-}" ]; then
+    saved_mode="$mode"
+    [ "$mode" = "$v2_layout" ] && saved_mode='debian-v2'
+    state_dir="$(dirname "$state_file")"
+    mkdir -p "$state_dir"
+    temporary="$(mktemp "$state_dir/.ui-mode.XXXXXX")"
+    trap 'rm -f "$temporary"' EXIT
+    printf '%s\n' "$saved_mode" >"$temporary"
+    mv "$temporary" "$state_file"
+    trap - EXIT
+fi
+
+if [ "$mode" = nova-shell ]; then
     suite_off
     pkill -x waybar 2>/dev/null || true
     stop_caelestia
@@ -86,7 +107,7 @@ fi
 # Tous les autres profils retirent ensemble la barre, l'horloge et le dock Nova.
 stop_nova
 
-if [ "$layout" = "$v2_layout" ]; then
+if [ "$mode" = "$v2_layout" ]; then
     suite_off
     pkill -x waybar 2>/dev/null || true
     apply_caelestia_windows
@@ -98,7 +119,7 @@ fi
 stop_caelestia
 restore_debian_windows
 
-if [ "$layout" = "no panel" ]; then
+if [ "$mode" = "no panel" ]; then
     suite_off
     pkill -x waybar 2>/dev/null || true
     exit 0
@@ -106,10 +127,6 @@ fi
 
 if [ -x "$palette_sync" ]; then
     "$palette_sync" --no-start >/dev/null 2>&1 || true
-fi
-
-if [ "$layout" = "[CUSTOM] Debian Glass" ]; then
-    exec "$suite" on "$layout"
 fi
 
 suite_off

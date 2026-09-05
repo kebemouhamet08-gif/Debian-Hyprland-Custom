@@ -120,6 +120,8 @@ install -m 0755 "$repo_dir/config/hypr/UserScripts/MinimizeWindow.sh" \
     "$hypr_user_scripts_dir/MinimizeWindow.sh"
 install -m 0755 "$repo_dir/config/hypr/UserScripts/RestoreMinimizedWindow.sh" \
     "$hypr_user_scripts_dir/RestoreMinimizedWindow.sh"
+install -m 0755 "$repo_dir/config/hypr/UserScripts/DeblestiaSystemThemeSync.sh" \
+    "$hypr_user_scripts_dir/DeblestiaSystemThemeSync.sh"
 install -m 0644 "$repo_dir/config/hypr/deblestia-input.conf" "$input_include"
 install -m 0644 "$repo_dir/config/hypr/deblestia-workspaces.conf" "$workspace_include"
 install -m 0644 "$repo_dir/config/hypr/deblestia-ui.conf" "$ui_include"

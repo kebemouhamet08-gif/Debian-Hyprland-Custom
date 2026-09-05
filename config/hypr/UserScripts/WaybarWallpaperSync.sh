@@ -83,6 +83,11 @@ if ! cmp -s "$temporary" "$panel_colors"; then
     trap - EXIT
 fi
 
+system_theme_sync="$HOME/.config/hypr/UserScripts/DeblestiaSystemThemeSync.sh"
+if [ -x "$system_theme_sync" ]; then
+    "$system_theme_sync" >/dev/null 2>&1 || true
+fi
+
 if [ "$reload_waybars" -eq 1 ]; then
     pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || true
 fi

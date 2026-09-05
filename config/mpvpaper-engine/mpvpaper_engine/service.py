@@ -73,6 +73,7 @@ class EngineService:
         self.server = EngineServer(self._methods(), self.paths)
         self._stop_event = threading.Event()
         self._started = False
+        self._hud_thread: threading.Thread | None = None
 
     def _methods(self):
         return {
@@ -97,7 +98,12 @@ class EngineService:
             "set_color": self._set_color,
             "set_performance_profile": self._set_performance_profile,
             "get_playback_state": self._get_playback_state,
+            "refresh_hud": self._refresh_hud,
         }
+
+    def _refresh_hud(self, params):
+        output = self._output(params)
+        return {"refreshed": self._invoke(self.playback.refresh_hud, output)}
 
     @staticmethod
     def _require_empty(params: dict[str, Any]) -> None:
@@ -238,6 +244,18 @@ class EngineService:
             self.server.shutdown()
             raise
         self._started = True
+        self._hud_thread = threading.Thread(
+            target=self._hud_loop, name="mpvpaper-hud", daemon=True
+        )
+        self._hud_thread.start()
+
+    def _hud_loop(self):
+        while not self._stop_event.wait(60):
+            for output in list(self.state.snapshot().outputs):
+                try:
+                    self.playback.refresh_hud(output)
+                except Exception:
+                    LOGGER.debug("HUD refresh failed for %s", output, exc_info=True)
 
     def _reconcile_running_outputs(self) -> None:
         """Reconstruct state once when wallpapers predate the Engine service."""
@@ -253,6 +271,7 @@ class EngineService:
         if not self._started:
             return
         self._stop_event.set()
+        self._hud_thread = None
         try:
             self.server.shutdown()
         finally:

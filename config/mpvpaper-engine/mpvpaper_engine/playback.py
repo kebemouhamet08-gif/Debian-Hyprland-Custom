@@ -20,6 +20,7 @@ from .config import (
     validate_output_name,
 )
 from .models import ColorProfile, PerformanceMode, PlaybackState, PlaybackStatus
+from .hud import HudManager
 from .paths import EnginePaths
 from .profiles import effective_settings, mpv_option_fragments
 from .state import StateStore
@@ -169,6 +170,8 @@ class PlaybackController:
         self.paths = paths or EnginePaths.from_environment()
         self.state = state
         self.systemd = systemd or SystemdManager()
+        self.hud = HudManager(self.paths.cache_home, self.paths.config_home)
+        self.hud.configure(self.config.ui.get("hud", {}))
 
     def _validate_output(self, output: str) -> None:
         if not validate_output_name(output):
@@ -200,6 +203,9 @@ class PlaybackController:
             *self._fit_options(profile.get("fit_mode", "cover")),
             "image-display-duration=inf", "keep-open=yes",
         ]
+        hud_file = self.hud.render(output)
+        if hud_file is not None:
+            options.extend([f"sub-files={hud_file}", "sub-auto=no"])
         if profile.get("loop", True):
             options.append("loop-file=inf")
         performance = effective_settings(profile.get("performance_profile", "auto"))
@@ -237,6 +243,7 @@ class PlaybackController:
             client.loadfile(wallpaper)
             _wait_for_media_path(client, wallpaper)
             self._apply_live_profile(client, profile)
+            self._apply_hud(client, output)
             strategy = "loadfile"
         except PlaybackError:
             self.systemd.stop_output(output)
@@ -250,6 +257,30 @@ class PlaybackController:
             position=0.0, duration=None, last_error=None,
         )
         return strategy
+
+    def _apply_hud(self, client: MpvClient, output: str) -> None:
+        hud_file = self.hud.render(output)
+        if hud_file is None:
+            return
+        client.set_property("sub-files", [str(hud_file)])
+        if hasattr(client, "command"):
+            try:
+                client.command("sub-reload")
+            except PlaybackError:
+                pass
+
+    def refresh_hud(self, output: str) -> bool:
+        hud_file = self.hud.render(output)
+        if hud_file is None:
+            return False
+        client = self._client(output)
+        client.set_property("sub-files", [str(hud_file)])
+        if hasattr(client, "command"):
+            try:
+                client.command("sub-reload")
+            except PlaybackError:
+                return False
+        return True
 
     def stop(self, output: str) -> None:
         self._validate_output(output)

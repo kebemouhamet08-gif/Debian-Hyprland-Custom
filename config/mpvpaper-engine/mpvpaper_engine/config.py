@@ -39,6 +39,8 @@ CANONICAL_DEFAULTS = {
     "auto_pause": True, "autostart": True, "performance_profile": "auto",
     "color_profile": "Original", "theme_sync": "off", **COLOR_DEFAULTS,
 }
+HUD_DEFAULTS = {"enabled": True, "position": {"x": 0.18, "y": 0.30}, "scale": 1.0,
+                "opacity": 1.0, "username": "ムハメト・ケベ", "elements": {}}
 LEGACY_KEYS = frozenset((*LEGACY_DEFAULT_CONFIG, "assignments"))
 
 
@@ -167,6 +169,7 @@ def normalize_legacy_config(data):
         mode=mode, defaults=dict(selected), outputs=outputs,
         selected_output=selected_output, selected_profile=selected,
         source_schema_version=None, raw_data=raw,
+        ui={"hud": deepcopy(HUD_DEFAULTS)},
     )
 
 
@@ -194,6 +197,7 @@ def normalize_v2_config(data):
         key: deepcopy(raw.get(key)) if isinstance(raw.get(key), dict) else {}
         for key in ("automation", "cache", "theme_sync", "ui")
     }
+    sections["ui"].setdefault("hud", deepcopy(HUD_DEFAULTS))
     return EngineConfig(
         mode=mode, defaults=defaults, outputs=outputs, color_profiles=colors,
         selected_output=selected_output, selected_profile=selected,

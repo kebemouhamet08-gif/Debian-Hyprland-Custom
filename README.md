@@ -72,6 +72,21 @@ git sparse-checkout set config/caelestia config/hypr config/v2
 ```
 
 ### MPVpaper Engine
+## 🎬 MPVpaper Engine Demo
+
+<p align="center">
+  <a href="https://youtu.be/2UVaLgqGK7k?si=VjY4wZeRyzTsoTa_">
+    <img
+      src="https://img.youtube.com/vi/2UVaLgqGK7k/maxresdefault.jpg"
+      alt="MPVpaper Engine on Linux / Hyprland"
+      width="800"
+    >
+  </a>
+</p>
+
+<p align="center">
+  <b>▶ Watch MPVpaper Engine running on Linux + Hyprland</b>
+</p>
 
 ```bash
 git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git mpvpaper-engine

@@ -5,9 +5,21 @@ nom dans ce guide : **Deblestia Bar**, **Deblestia Nova**, **Deblestia Nova Lite
 **MPVpaper Engine**, **PeriphX** et **MirrorBridge**. Les commandes historiques restent disponibles
 comme alias techniques afin de préserver les installations existantes
 
-## 🎥 Video Demo
+## 🎬 Video Demo
 
-[![Watch the video](https://img.youtube.com/vi/tgntfMrhgew/hqdefault.jpg)](https://youtu.be/tgntfMrhgew)
+<p align="center">
+  <a href="https://youtu.be/tgntfMrhgew">
+    <img
+      src="https://img.youtube.com/vi/tgntfMrhgew/maxresdefault.jpg"
+      alt="YouTube Demo"
+      width="800"
+    >
+  </a>
+</p>
+
+<p align="center">
+  <b>▶ Watch the full video on YouTube</b>
+</p>
 
 ## Installation guidée
 

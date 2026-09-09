@@ -13,6 +13,12 @@ import subprocess
 import urllib.request
 
 
+def language():
+    value = os.environ.get("DEBLESTIA_LANG") or os.environ.get("LC_ALL") or \
+        os.environ.get("LC_MESSAGES") or os.environ.get("LANG", "fr")
+    return "en" if value.lower().replace("-", "_").startswith("en") else "fr"
+
+
 def command(*args, timeout=3):
     try:
         result = subprocess.run(args, capture_output=True, text=True, timeout=timeout,
@@ -117,19 +123,24 @@ def detect(check_network=False):
     }
 
 
-def human(data):
+def human(data, lang=None):
+    lang = lang or language()
     gib = 1024 ** 3
+    yes, no, missing, undetected = (("yes", "no", "missing", "not detected")
+                                    if lang == "en" else
+                                    ("oui", "non", "absent", "non détecté"))
     rows = (
         ("Debian", data["distribution_name"]), ("Architecture", data["architecture"]),
-        ("Noyau", data["kernel"]), ("Machine", data["virtualization"]),
+        (("Kernel" if lang == "en" else "Noyau"), data["kernel"]),
+        ("Machine", data["virtualization"]),
         ("CPU / threads", f'{data["cpu"]} / {data["threads"]}'),
         ("RAM", f'{data["ram_bytes"] / gib:.1f} GiB'),
         ("GPU", " | ".join(data["gpu"])), ("OpenGL", data["opengl_renderer"]),
-        ("/dev/dri", ", ".join(data["dri"]) or "absent"),
-        ("Session", data["session"]), ("Hyprland", "oui" if data["hyprland"] else "non"),
-        ("GNOME conservable", "oui" if data["gnome"] else "non détecté"),
+        ("/dev/dri", ", ".join(data["dri"]) or missing),
+        ("Session", data["session"]), ("Hyprland", yes if data["hyprland"] else no),
+        (("GNOME preserved" if lang == "en" else "GNOME conservable"), yes if data["gnome"] else undetected),
         ("Display manager", data["display_manager"]),
-        ("Disque libre", f'{data["disk_free_bytes"] / gib:.1f} GiB'),
+        (("Free disk space" if lang == "en" else "Disque libre"), f'{data["disk_free_bytes"] / gib:.1f} GiB'),
     )
     return "\n".join(f"{label:20} {value}" for label, value in rows)
 
@@ -138,9 +149,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--network", action="store_true")
+    parser.add_argument("--lang", choices=("en", "fr"))
     args = parser.parse_args(argv)
     data = detect(args.network)
-    print(json.dumps(data, ensure_ascii=False, indent=2) if args.json else human(data))
+    print(json.dumps(data, ensure_ascii=False, indent=2) if args.json else human(data, args.lang))
 
 
 if __name__ == "__main__":

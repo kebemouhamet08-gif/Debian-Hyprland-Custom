@@ -3,6 +3,8 @@
 deblestia_repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 deblestia_state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/deblestia/setup"
 deblestia_manifest="$deblestia_repo_dir/manifests/components.tsv"
+# shellcheck source=core/i18n.sh
+source "$deblestia_repo_dir/core/i18n.sh"
 
 deblestia_profile() {
     python3 "$deblestia_repo_dir/core/compatibility.py" --json | jq -r .profile
@@ -36,19 +38,19 @@ deblestia_install_component() {
     label="$(deblestia_component_field "$component" 2)"
     critical="$(deblestia_component_field "$component" 5)"
     if [ -z "$installer" ] || [ ! -x "$deblestia_repo_dir/$installer" ]; then
-        printf 'ERREUR   composant inconnu ou installateur absent : %s\n' "$component" >&2
+        deblestia_t installer_missing "$component" >&2; printf '\n' >&2
         return 1
     fi
-    printf '\nInstallation : %s\n' "$label"
+    printf '\n'; deblestia_t installing "$label"; printf '\n'
     if "$deblestia_repo_dir/$installer" check && "$deblestia_repo_dir/$installer" install; then
         deblestia_record_component "$component"
         return 0
     fi
     if [ "$critical" = yes ]; then
-        printf 'ÉCHEC critique : %s\n' "$label" >&2
+        deblestia_t critical_failure "$label" >&2; printf '\n' >&2
         return 1
     fi
-    printf 'OPTIONNEL indisponible : %s. Installation générale poursuivie.\n' "$label" >&2
+    deblestia_t optional_failure "$label" >&2; printf '\n' >&2
 }
 
 deblestia_packages() {

@@ -19,6 +19,26 @@ class SetupShellTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("diagnostic", result.stdout)
 
+    def test_english_can_be_selected_explicitly(self):
+        result = self.execute(["./install.sh", "--lang", "en", "--help"], LANG="fr_FR.UTF-8")
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("Usage:", result.stdout)
+        self.assertIn("--lang en|fr", result.stdout)
+
+    def test_english_is_detected_from_locale(self):
+        result = self.execute(["./install.sh", "--help"], LANG="en_US.UTF-8",
+                              LC_ALL="", LC_MESSAGES="")
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("Usage:", result.stdout)
+
+    def test_english_dry_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.execute(["./install.sh", "--lang=en", "plan"],
+                                  XDG_STATE_HOME=directory)
+            self.assertFalse((Path(directory) / "deblestia/setup").exists())
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("Dry run complete: no changes were made.", result.stdout)
+
     def test_historical_nova_wrapper_targets_legacy_engine(self):
         text = (ROOT / "install-deblestia-nova2.sh").read_text()
         self.assertIn("install-nova2.sh", text)

@@ -7,23 +7,23 @@ source "$repo_dir/core/setup.sh"
 action="${1:-uninstall}"
 
 if [ ! -f "$deblestia_state_dir/components" ]; then
-    printf 'Aucune installation unifiée enregistrée. Les anciens installateurs restent gérés par leur commande restore.\n'
+    deblestia_t no_installation; printf '\n'
     exit 0
 fi
 mapfile -t installed <"$deblestia_state_dir/components"
-printf 'Composants enregistrés : %s\n' "${installed[*]}"
+deblestia_t installed_components "${installed[*]}"; printf '\n'
 if [ "$action" = uninstall ] && [ "${DEBLESTIA_ASSUME_YES:-0}" != 1 ]; then
-    [ -t 0 ] || { printf 'Confirmation interactive requise.\n' >&2; exit 1; }
-    read -r -p "Restaurer sans supprimer GNOME ni les paquets système ? [o/N] " answer
+    [ -t 0 ] || { deblestia_t confirmation_short >&2; printf '\n' >&2; exit 1; }
+    read -r -p "$(deblestia_t restore_prompt)" answer
     case "$answer" in o|O|oui|OUI|y|Y|yes|YES) ;; *) exit 0;; esac
 fi
 remaining=()
 for component_name in "${installed[@]}"; do
     installer="$(deblestia_component_field "$component_name" 3)"
     if "$repo_dir/$installer" restore; then
-        printf 'Restauré : %s\n' "$component_name"
+        deblestia_t restored "$component_name"; printf '\n'
     else
-        printf 'Restauration non disponible : %s\n' "$component_name" >&2
+        deblestia_t restore_unavailable "$component_name" >&2; printf '\n' >&2
         remaining+=("$component_name")
     fi
 done
@@ -32,4 +32,4 @@ if ((${#remaining[@]})); then
     exit 1
 fi
 rm -f "$deblestia_state_dir/components" "$deblestia_state_dir/profile"
-printf 'État Deblestia retiré. GNOME, GDM et les paquets existants sont conservés.\n'
+deblestia_t state_removed; printf '\n'

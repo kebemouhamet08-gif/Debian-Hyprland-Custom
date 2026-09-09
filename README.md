@@ -1,5 +1,7 @@
 # Deblestia — Debian × Caelestia
 
+**Français** · [English](README.en.md)
+
 Ce dépôt regroupe **Deblestia Bar**, **Deblestia Nova**, **Deblestia Nova Lite**,
 **Deblestia Shell**, **MPVpaper Engine**, **PeriphX** et **MirrorBridge**. Les
 commandes historiques, dont Deblestia Nova 2, restent disponibles pour préserver
@@ -51,6 +53,10 @@ automatique, manuel, contribution et désinstallation sont accessibles depuis le
 menu. L'ancien `./installation-guidee.sh` reste compatible pour installer un
 composant séparément. Voir le [démarrage rapide](docs/installation/QUICKSTART.md)
 et le [guide VirtualBox](docs/installation/VIRTUALBOX.md).
+
+La langue suit automatiquement la locale du système. Pour imposer l’anglais ou
+le français : `./install.sh --lang en` ou `./install.sh --lang fr`. La variable
+`DEBLESTIA_LANG=en` permet aussi de conserver ce choix dans les scripts.
 
 ## Télécharger et installer un seul composant
 

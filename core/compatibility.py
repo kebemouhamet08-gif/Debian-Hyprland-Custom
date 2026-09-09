@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -64,16 +65,29 @@ def evaluate(data):
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--lang", choices=("en", "fr"))
     args = parser.parse_args(argv)
     result = evaluate(detect())
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
-        print(f'Compatibilité       {result["compatibility"]}')
-        print(f'Profil recommandé   {result["profile"]}')
+        locale = args.lang or os.environ.get("DEBLESTIA_LANG") or os.environ.get("LANG", "fr")
+        english = locale.lower().replace("-", "_").startswith("en")
+        print(f'{"Compatibility" if english else "Compatibilité":20} {result["compatibility"]}')
+        print(f'{"Recommended profile" if english else "Profil recommandé":20} {result["profile"]}')
         print(f'Performance         {result["performance_score"]}/100')
         for reason in result["reasons"]:
-            print(f'ATTENTION            {reason}')
+            translations = {
+                "distribution non Debian": "non-Debian distribution",
+                "architecture non prise en charge": "unsupported architecture",
+                "accélération graphique non détectée": "graphics acceleration not detected",
+                "/dev/dri masqué par l’environnement de diagnostic ; session Hyprland utilisée comme preuve":
+                    "/dev/dri hidden by the diagnostic environment; Hyprland session used as evidence",
+                "rendu logiciel llvmpipe": "llvmpipe software rendering",
+            }
+            label = "WARNING" if english else "ATTENTION"
+            message = translations.get(reason, reason) if english else reason
+            print(f'{label:20} {message}')
 
 
 if __name__ == "__main__":

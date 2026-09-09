@@ -6,7 +6,7 @@ import json
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from mpvpaper_engine.hud_overlay import DesktopHud
+from mpvpaper_engine.hud_overlay import DesktopHud, wayland_environment
 from mpvpaper_engine.paths import EnginePaths
 from mpvpaper_engine.config import normalize_v2_config
 from mpvpaper_engine.playback import PlaybackController
@@ -32,6 +32,22 @@ class HudOverlayTests(unittest.TestCase):
         self.assertEqual(json.loads(self.overlay.state_file.read_text())["settings"], {"enabled": False})
         self.assertIn("mpvpaper_engine.hud_window", self.popen.call_args.args[0])
         self.assertEqual(self.overlay.state_file.stat().st_mode & 0o777, 0o600)
+
+    def test_systemd_start_recovers_wayland_socket(self):
+        runtime = self.paths.runtime_home
+        runtime.mkdir(parents=True, exist_ok=True)
+        socket_path = runtime / "wayland-1"
+        with mock.patch.object(Path, "glob", return_value=[socket_path]), \
+                mock.patch.object(Path, "is_socket", return_value=True):
+            environment = wayland_environment({"XDG_RUNTIME_DIR": str(runtime)})
+        self.assertEqual(environment["WAYLAND_DISPLAY"], "wayland-1")
+
+    def test_existing_wayland_display_is_preserved(self):
+        environment = wayland_environment({
+            "XDG_RUNTIME_DIR": str(self.paths.runtime_home),
+            "WAYLAND_DISPLAY": "wayland-custom",
+        })
+        self.assertEqual(environment["WAYLAND_DISPLAY"], "wayland-custom")
 
     def test_stop_wallpaper_never_stops_or_reconfigures_hud(self):
         systemd = mock.Mock()

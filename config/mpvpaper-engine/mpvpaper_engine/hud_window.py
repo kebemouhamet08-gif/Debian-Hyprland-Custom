@@ -10,7 +10,28 @@ from .hud import preview_settings, _palette, settings_from_config
 from .hud_scene import draw, geometry, logical_screen
 from .hud_positioning import Rect
 from .hud_layers import detect_layers, panel_rects, HudLayerError
-from .monitors import detect_monitors, MonitorError
+from .monitors import detect_monitors, MonitorError, MonitorInfo
+
+
+def gdk_monitors(display, settings):
+    """Build logical monitor data without hyprctl during early session startup."""
+    configured = [
+        name for name in (settings.get("outputs", {}) if isinstance(settings, dict) else {})
+        if name != "*"
+    ]
+    result = []
+    for index in range(display.get_n_monitors()):
+        monitor = display.get_monitor(index)
+        rect = monitor.get_geometry()
+        model = monitor.get_model()
+        name = configured[index] if index < len(configured) else (
+            model.strip() if isinstance(model, str) and model.strip() else f"display-{index + 1}"
+        )
+        result.append(MonitorInfo(
+            name=name, width=rect.width, height=rect.height,
+            x=rect.x, y=rect.y, scale=1.0,
+        ))
+    return result
 
 
 def main():
@@ -81,7 +102,9 @@ def main():
             try:
                 monitors = detect_monitors()
             except MonitorError:
-                pass
+                monitors = []
+            if not monitors:
+                monitors = gdk_monitors(display, payload.get("settings", {}))
             try:
                 layers = detect_layers()
             except HudLayerError:

@@ -10,6 +10,26 @@ import threading
 import time
 
 
+def wayland_environment(environment=None):
+    """Recover the compositor socket when systemd started before env import."""
+    result = dict(os.environ if environment is None else environment)
+    if result.get("WAYLAND_DISPLAY"):
+        return result
+    runtime = result.get("XDG_RUNTIME_DIR")
+    if not runtime:
+        return result
+    try:
+        sockets = sorted(
+            path for path in Path(runtime).glob("wayland-*")
+            if path.is_socket()
+        )
+    except OSError:
+        return result
+    if sockets:
+        result["WAYLAND_DISPLAY"] = sockets[0].name
+    return result
+
+
 class DesktopHud:
     def __init__(self, paths, popen=None):
         self.paths = paths
@@ -40,7 +60,8 @@ class DesktopHud:
             if time.monotonic() < self._retry_after:
                 return False
             self._retry_after = time.monotonic() + 10
-            environment = dict(os.environ, GDK_BACKEND="wayland")
+            environment = wayland_environment()
+            environment["GDK_BACKEND"] = "wayland"
             environment["PYTHONPATH"] = str(Path(__file__).resolve().parent.parent)
             self.process = self._popen(
                 [sys.executable, "-B", "-m", "mpvpaper_engine.hud_window",

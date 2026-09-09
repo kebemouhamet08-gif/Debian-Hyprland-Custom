@@ -14,6 +14,26 @@ les installations existantes.
   </a>
 </p>
 
+## Captures des interfaces
+
+### Deblestia Bar
+
+| Bureau et HUD | Lanceur d’applications |
+| --- | --- |
+| ![Deblestia Bar avec barre verticale et HUD](docs/images/deblestia-bar-desktop.png) | ![Lanceur d’applications de Deblestia Bar](docs/images/deblestia-bar-launcher.png) |
+
+### Deblestia Nova 2
+
+| Bureau et barre multi-écran | Menu de session |
+| --- | --- |
+| ![Deblestia Nova 2 avec barre horizontale multi-écran](docs/images/deblestia-nova2-desktop.png) | ![Menu de session de Deblestia Nova 2](docs/images/deblestia-nova2-session.png) |
+
+### Deblestia Nova Lite
+
+| Tableau de bord | Centre de contrôle |
+| --- | --- |
+| ![Tableau de bord de Deblestia Nova Lite](docs/images/deblestia-nova-lite-dashboard.png) | ![Centre de contrôle de Deblestia Nova Lite](docs/images/deblestia-nova-lite-control-center.png) |
+
 ## Installation simple
 
 Deblestia Setup analyse la machine, recommande un profil et conserve GNOME ainsi

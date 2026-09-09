@@ -1,7 +1,7 @@
 # Feuille de route v3 — Debian Next
 
-La V3 sera une expérience indépendante de Deblestia Bar et Deblestia Shell. Elle
-ne remplacera aucune version existante et conservera ses propres
+La V3 sera un composant indépendant des trois interfaces conservées. Elle ne
+remplacera aucune interface et conservera ses propres
 réglages, sauvegardes, manifeste et installateur.
 
 ## Direction initiale

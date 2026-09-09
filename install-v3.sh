@@ -40,7 +40,7 @@ Usage : ./install-periphx.sh [check|install|dev|launch|status|restore] [--dry-ru
     dev         utilise directement le code source PeriphX du dépôt
     launch      lance le centre de contrôle matériel
   status      affiche l'état de PeriphX
-  restore     retire PeriphX sans toucher à Deblestia Bar ou Deblestia Shell
+  restore     retire PeriphX sans toucher aux interfaces Deblestia
   --dry-run   affiche les écritures prévues
 EOF
 }
@@ -237,7 +237,7 @@ restore_v3() {
         "$cli_target" "$bin_dir/periphx-cli" "$launcher_target" "$pericore_command" \
         "$pericore_target" "$pericore_target.new" "$service_target"
     rm -rf "$state_dir"
-    printf 'PeriphX supprimé. Deblestia Bar et Deblestia Shell n ont pas été touchés.\n'
+    printf 'PeriphX supprimé. Les interfaces Deblestia n ont pas été touchées.\n'
 }
 
 action="${1:-install}"

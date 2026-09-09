@@ -1,9 +1,9 @@
-# Feuille de route v2 — Deblestia Shell
+# Feuille de route v2 — Custom Debian V2 Immersive
 
 La v2 est une expérience autonome construite autour de Caelestia, MPVpaper Engine
-et de concepts adaptés de HyDE. Elle coexiste avec la v1 « Deblestia Bar », mais ne
-la remplace pas et n'en dépend pas. Elle ne reprend ni l'installateur Arch Linux ni
-ses commandes `pacman`/AUR.
+et de concepts adaptés de HyDE. Elle constitue le mode « Custom Debian V2
+Immersive » et coexiste avec Nova 2 et Nova Shell Custom Debian. Elle ne reprend
+ni l'installateur Arch Linux ni ses commandes `pacman`/AUR.
 
 ## Principes
 
@@ -14,7 +14,7 @@ ses commandes `pacman`/AUR.
 - Chaque composant peut être installé, testé et restauré séparément.
 - Aucun installateur ne remplace un fichier utilisateur sans sauvegarde préalable.
 - Les réglages utilisateur sont séparés des fichiers distribués par le projet.
-- La v1 reste installable avec `install.sh`, indépendamment du cycle de la v2.
+- Nova 2 reste installable avec `install.sh`, indépendamment du cycle de la v2.
 - Les adaptations externes conservent leurs crédits et licences.
 
 ## Étapes
@@ -34,7 +34,7 @@ le même résultat et chaque fichier remplacé est restaurable.
 - définir un format de thème commun pour GTK, Qt, Hyprland, Caelestia/Waybar,
   Kitty, Rofi et les fonds d'écran ;
 - installer, activer et supprimer un thème sans toucher aux autres profils ;
-- migrer « Deblestia Bar » comme premier thème compatible.
+- maintenir un thème commun aux trois interfaces conservées.
 
 Validation : le changement de thème est atomique et le retour au thème précédent
 fonctionne sans reconnexion lorsque les applications le permettent.

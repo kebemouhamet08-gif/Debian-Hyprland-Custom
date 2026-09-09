@@ -166,19 +166,21 @@
 	},
 },
 // NUMBERS and ICONS style with window rewrite
-"hyprland/workspaces#rw": {
-	"disable-scroll": true,
-	"all-outputs": true,
-	"warp-on-scroll": false,
-	"sort-by-number": true,
-	"show-special": false,
+"hyprland/workspaces#deblestia": {
+	"all-outputs": false,
+	"active-only": false,
+	"move-to-monitor": false,
+	"sort-by": "number",
+	"show-special": true,
+	"special-visible-only": true,
 	"on-click": "activate",
-	"on-scroll-up": "hyprctl dispatch workspace e+1",
-	"on-scroll-down": "hyprctl dispatch workspace e-1",
-	"persistent-workspaces": {
-		"*": 5
-	  },
-	"format": "{icon} {windows}",
+	"on-scroll-up": "$HOME/.config/hypr/scripts/deblestia-workspace-action.sh previous",
+	"on-scroll-down": "$HOME/.config/hypr/scripts/deblestia-workspace-action.sh next",
+	"ignore-workspaces": [
+		"special:minimized",
+		"(special:)?chrome-sharing-indicator"
+	],
+	"format": "{name} {windows}",
 	"format-window-separator": " ",
 	"window-rewrite-default": " ",
 	"window-rewrite": {
@@ -261,9 +263,10 @@
 		"class<nwg-displays>": " ",
 		"class<[Pp]avucontrol|org.pulseaudio.pavucontrol>": "󱡫 ",
 		"class<steam>": " ",
-		"class<thunar|nemo>": "󰝰 ",
+		"class<thunar|nemo|org.gnome.Nautilus|nautilus|dolphin|org.kde.dolphin>": "󰝰 ",
 		"class<Gparted>":"",
 		"class<gimp>": " ",
+		"class<[Bb]lender|org.blender.Blender>": "󰂫 ",
 		"class<emulator>": "📱 ",
 		"class<android-studio>": " ",
 		"class<org.pipewire.Helvum>": "󰓃",

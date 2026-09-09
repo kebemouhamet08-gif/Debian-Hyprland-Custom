@@ -16,6 +16,7 @@ from typing import Callable
 
 from .metadata import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from .paths import EnginePaths
+from .waybar_theme import write_panel_colors
 
 
 THEME_SYNC_MODES = {"off", "on_apply", "always"}
@@ -170,10 +171,12 @@ class ThemeSync:
             frames = ECO_FRAMES if profile == "eco" else DEFAULT_FRAMES
             palette = self.extractor(source, frames=frames)
             _atomic_json(self.palette_file, asdict(palette))
+            wallust = self._run_wallust(source)
+            waybar = self._update_waybar(palette)
             integrations = {
-                "waybar": self._signal_waybar(),
+                "waybar": waybar,
                 "nova": self._notify_nova(),
-                "wallust": self._run_wallust(source),
+                "wallust": wallust,
             }
             _atomic_json(self.state_file, {
                 "key": key, "source": str(source), "updated_monotonic": self.clock(),
@@ -195,6 +198,20 @@ class ThemeSync:
 
     def _signal_waybar(self):
         return self._run(["pkill", "-RTMIN+8", "-x", "waybar"])
+
+    def _update_waybar(self, palette: Palette) -> str:
+        waybar_dir = self.paths.config_home.parent / "waybar"
+        changed = write_panel_colors(
+            waybar_dir,
+            palette={
+                "accent": palette.colors[0] if palette.colors else palette.foreground,
+                "foreground": palette.foreground,
+                "background": palette.background,
+                "muted": palette.colors[-1] if palette.colors else palette.foreground,
+            },
+        )
+        signal = self._signal_waybar() if changed else "unchanged"
+        return f"updated; {signal}" if changed else signal
 
     def _notify_nova(self):
         return self._run(["qs", "ipc", "call", "wallpaper", "paletteChanged"])

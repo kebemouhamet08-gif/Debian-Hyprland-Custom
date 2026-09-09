@@ -13,6 +13,11 @@ backup_dir="$HOME/.config/mpvpaper-engine-backup-$timestamp"
 
 check_dependencies() {
     local command_name failed=0
+    if python3 -c "import gi, cairo; gi.require_version('Gtk', '3.0'); gi.require_version('GtkLayerShell', '0.1'); gi.require_version('PangoCairo', '1.0')" 2>/dev/null; then
+        printf 'OK       HUD de bureau indépendant (GTK Layer Shell)\n'
+    else
+        printf 'OPTIONNEL HUD : installer gir1.2-gtklayershell-0.1 et python3-gi-cairo\n'
+    fi
     for command_name in mpvpaper ffmpeg ffmpegthumbnailer ffprobe python3 systemctl systemd-run hyprctl; do
         if command -v "$command_name" >/dev/null 2>&1; then
             printf 'OK       %s\n' "$command_name"

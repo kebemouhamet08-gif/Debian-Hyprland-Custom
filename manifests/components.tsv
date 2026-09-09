@@ -1,0 +1,8 @@
+# id	label	installer	profiles	critical
+deblestia-bar	Deblestia Bar	install-deblestia-bar.sh	LEGACY,LITE,BALANCED,FULL	yes
+deblestia-nova-lite	Deblestia Nova Lite	install-deblestia-nova-lite.sh	LITE,BALANCED,FULL	no
+deblestia-nova	Deblestia Nova	install-deblestia-nova.sh	FULL	no
+deblestia-shell	Deblestia Shell	install-deblestia-shell.sh	FULL	no
+mpvpaper-engine	MPVpaper Engine	install-mpvpaper-engine.sh	BALANCED,FULL	no
+periphx	PeriphX	install-periphx.sh	BALANCED,FULL	no
+mirrorbridge	MirrorBridge	install-mirrorbridge.sh	FULL	no

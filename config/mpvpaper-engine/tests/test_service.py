@@ -16,6 +16,8 @@ from mpvpaper_engine.ipc import (  # noqa: E402
 )
 from mpvpaper_engine.paths import EnginePaths  # noqa: E402
 from mpvpaper_engine.service import EngineService  # noqa: E402
+from mpvpaper_engine.service import initial_state_from_config  # noqa: E402
+from mpvpaper_engine.config import normalize_v2_config  # noqa: E402
 from mpvpaper_engine.state import read_state  # noqa: E402
 
 
@@ -30,6 +32,10 @@ def temporary_paths(root):
 
 class ServiceTests(unittest.TestCase):
     def setUp(self):
+        # Never create desktop windows or alter the user's graphical session.
+        overlay = mock.patch("mpvpaper_engine.playback.DesktopHud", autospec=True)
+        self.overlay = overlay.start().return_value
+        self.addCleanup(overlay.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.paths = temporary_paths(self.temporary.name)
         self.paths.config_home.mkdir(parents=True)
@@ -64,6 +70,18 @@ class ServiceTests(unittest.TestCase):
         self.assertIsNone(output.position)
         self.assertIsNone(output.duration)
         self.assertEqual(str(output.path), "/wallpapers/laptop.mp4")
+
+    def test_wildcard_is_not_a_runtime_output(self):
+        config = normalize_v2_config({
+            "schema_version": 2,
+            "outputs": {
+                "*": {"wallpaper": "/wallpapers/all.mp4"},
+                "eDP-1": {"wallpaper": "/wallpapers/laptop.mp4"},
+            },
+        })
+        state = initial_state_from_config(config)
+        self.assertNotIn("*", state.outputs)
+        self.assertIn("eDP-1", state.outputs)
 
     def test_ping(self):
         self.service.start()
@@ -105,6 +123,18 @@ class ServiceTests(unittest.TestCase):
             self.service.playback.get_state.assert_called_once_with("eDP-1")
         finally:
             existing.close()
+
+    def test_start_restores_existing_saved_wallpaper(self):
+        wallpaper = self.paths.config_home / "saved.mp4"
+        wallpaper.write_bytes(b"video")
+        self.service.config.outputs = {
+            "eDP-1": {"wallpaper": str(wallpaper), "autostart": True},
+        }
+        self.service.playback.play = mock.Mock(return_value="loadfile")
+
+        self.service.start()
+
+        self.service.playback.play.assert_called_once_with("eDP-1", wallpaper)
 
     def test_single_instance(self):
         self.service.start()
@@ -148,6 +178,32 @@ class ServiceTests(unittest.TestCase):
                 "output": "eDP-1", "muted": "false",
             })
         self.assertEqual(caught.exception.code, "playback_error")
+
+    def test_hud_preview_is_ipc_only_and_does_not_change_config_file(self):
+        self.service.playback.preview_hud = mock.Mock(
+            return_value={"previewed": ["eDP-1"]}
+        )
+        self.service.start()
+        before = self.paths.config_file.read_bytes()
+        persistent = self.service.config.ui["hud"]
+        result = EngineClient(self.paths).preview_hud(
+            "eDP-1", {"enabled": True, "position": {"x": 0.8, "y": 0.4}}
+        )
+        self.assertEqual(result, {"previewed": ["eDP-1"]})
+        self.service.playback.preview_hud.assert_called_once()
+        self.assertEqual(self.paths.config_file.read_bytes(), before)
+        self.assertEqual(self.service.config.ui["hud"], persistent)
+
+    def test_clear_hud_preview_is_dispatched(self):
+        self.service.playback.clear_hud_preview = mock.Mock(
+            return_value={"cleared": ["eDP-1"]}
+        )
+        self.service.start()
+        self.assertEqual(
+            EngineClient(self.paths).clear_hud_preview("eDP-1"),
+            {"cleared": ["eDP-1"]},
+        )
+        self.service.playback.clear_hud_preview.assert_called_once_with("eDP-1")
 
 
 if __name__ == "__main__":

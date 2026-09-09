@@ -21,10 +21,13 @@ from .config import (
 )
 from .models import ColorProfile, PerformanceMode, PlaybackState, PlaybackStatus
 from .hud import HudManager
+from .hud import normalized_hud, merge_hud, effective_hud
+from .hud_overlay import DesktopHud
 from .paths import EnginePaths
 from .profiles import effective_settings, mpv_option_fragments
 from .state import StateStore
-from .systemd import SystemdManager
+from .systemd import SystemdError, SystemdManager
+from .wallpaper_providers import WallpaperProviderManager
 
 
 MPV_TIMEOUT = 2.0
@@ -165,13 +168,19 @@ class PlaybackController:
         paths: EnginePaths | None = None,
         state: StateStore | None = None,
         systemd: SystemdManager | None = None,
+        provider_manager: WallpaperProviderManager | None = None,
+        monitor_detector=None,
     ):
         self.config = config
         self.paths = paths or EnginePaths.from_environment()
         self.state = state
         self.systemd = systemd or SystemdManager()
+        self.provider_manager = provider_manager or WallpaperProviderManager()
+        self.monitor_detector = monitor_detector
         self.hud = HudManager(self.paths.cache_home, self.paths.config_home)
         self.hud.configure(self.config.ui.get("hud", {}))
+        self._hud_previews: dict[str, dict[str, Any]] = {}
+        self.desktop_hud = DesktopHud(self.paths)
 
     def _validate_output(self, output: str) -> None:
         if not validate_output_name(output):
@@ -204,12 +213,7 @@ class PlaybackController:
             *self._fit_options(profile.get("fit_mode", "cover")),
             "image-display-duration=inf", "keep-open=yes",
         ]
-        hud_file = self.hud.render(output)
-        if hud_file is not None:
-            options.extend([
-                f"sub-file={hud_file}", "sub-auto=no", "sid=1",
-                "sub-visibility=yes", "osd-level=1",
-            ])
+        options.append("sub-auto=no")
         if profile.get("loop", True):
             options.append("loop-file=inf")
         performance = effective_settings(profile.get("performance_profile", "auto"))
@@ -238,10 +242,34 @@ class PlaybackController:
         return values[mode]
 
     def play(self, output: str, wallpaper: Path) -> str:
+        self._validate_output(output)
+        if output == "*":
+            detector = self.monitor_detector
+            if detector is None:
+                from .monitors import detect_monitors
+                detector = detect_monitors
+            monitors = detector()
+            targets = [monitor.name for monitor in monitors]
+            if not targets:
+                raise PlaybackError("no connected monitors for wildcard playback")
+            strategies = [self.play(target, wallpaper) for target in targets]
+            return "loadfile" if all(strategy == "loadfile" for strategy in strategies) else "systemd"
+        return self._play_output(output, wallpaper)
+
+    def _play_output(self, output: str, wallpaper: Path) -> str:
         profile = self._profile(output)
         wallpaper = Path(wallpaper).expanduser().resolve()
         if not wallpaper.is_file() or wallpaper.suffix.casefold() not in MEDIA_EXTENSIONS:
             raise ValueError("wallpaper is missing or unsupported")
+        try:
+            self.systemd.stop_output("*")
+        except SystemdError:
+            # A healthy existing MPV socket does not require systemd to be present.
+            pass
+        try:
+            self.provider_manager.stop_conflicting()
+        except Exception as error:
+            raise PlaybackError(str(error)) from error
         client = self._client(output)
         try:
             client.loadfile(wallpaper)
@@ -263,56 +291,70 @@ class PlaybackController:
         return strategy
 
     def _apply_hud(self, client: MpvClient, output: str) -> None:
-        hud_file = self.hud.render(output)
-        if hud_file is None:
-            self._remove_hud(client)
-            return
-        self._load_hud_subtitle(client, hud_file)
-        client.set_property("sub-visibility", True)
-        if hasattr(client, "command"):
-            try:
-                client.command("sub-reload")
-            except PlaybackError:
-                pass
+        # Remove only our old ASS track when reusing a pre-upgrade MPV process.
+        tracks = client.get_property("track-list")
+        for track in tracks if isinstance(tracks, list) else ():
+            if not isinstance(track, dict) or track.get("type") != "sub":
+                continue
+            filename = track.get("external-filename")
+            if isinstance(filename, str) and Path(filename) == self.hud.path(output):
+                client.command("sub-remove", track["id"])
 
     def refresh_hud(self, output: str) -> bool:
-        hud_file = self.hud.render(output)
-        if hud_file is None:
-            self._remove_hud(self._client(output))
-            return False
-        client = self._client(output)
-        self._load_hud_subtitle(client, hud_file)
-        client.set_property("sub-visibility", True)
-        if hasattr(client, "command"):
-            try:
-                client.command("sub-reload")
-            except PlaybackError:
-                return False
-        return True
+        self._validate_output(output)
+        return self.desktop_hud.update(self.hud._config, self._hud_previews)
 
-    @staticmethod
-    def _remove_hud(client: MpvClient) -> None:
-        if not hasattr(client, "command"):
-            client.set_property("sub-visibility", False)
-            return
-        current_sid = client.get_property("sid")
-        if isinstance(current_sid, int):
-            client.command("sub-remove", current_sid)
-        client.set_property("sub-visibility", False)
+    def start_hud(self):
+        self.desktop_hud.start(self.hud._config, self._hud_previews)
+        for output in self.config.outputs:
+            if output != "*" and any(path.is_socket() for path in mpv_socket_candidates(self.paths, output)):
+                try:
+                    self._apply_hud(self._client(output), output)
+                except PlaybackError:
+                    pass
 
-    @staticmethod
-    def _load_hud_subtitle(client: MpvClient, hud_file: Path) -> None:
-        if not hasattr(client, "command"):
-            client.set_property("sub-files", [str(hud_file)])
-            client.set_property("sid", 1)
-            return
-        current_sid = client.get_property("sid")
-        if isinstance(current_sid, int):
-            client.command("sub-remove", current_sid)
-        client.command("sub-add", str(hud_file), "select")
+    def stop_hud(self):
+        self.desktop_hud.close()
+
+    def _hud_outputs(self, output: str) -> list[str]:
+        self._validate_output(output)
+        if output != "*":
+            return [output]
+        from .monitors import detect_monitors, MonitorError
+        try:
+            return [monitor.name for monitor in (self.monitor_detector or detect_monitors)()]
+        except MonitorError:
+            return list(self.state.outputs) if self.state is not None else []
+
+    def preview_hud(self, output: str, settings: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(settings, dict):
+            raise ValueError("HUD settings must be an object")
+        # Validate through the same normalization used by regular HUD rendering.
+        self.hud.settings_for_output(output, settings)
+        outputs = self._hud_outputs(output)
+        self._hud_previews[output] = normalized_hud(effective_hud(self.hud._config, output, settings))
+        refreshed = []
+        if not outputs:
+            self.refresh_hud("*")
+        for target in outputs:
+            if self.refresh_hud(target):
+                refreshed.append(target)
+        return {"previewed": refreshed}
+
+    def clear_hud_preview(self, output: str) -> dict[str, Any]:
+        outputs = self._hud_outputs(output)
+        self._hud_previews.pop(output, None)
+        refreshed = []
+        if not outputs:
+            self.refresh_hud("*")
+        for target in outputs:
+            if self.refresh_hud(target):
+                refreshed.append(target)
+        return {"cleared": refreshed}
 
     def configure_hud(self, settings: dict[str, Any]) -> None:
-        self.hud.configure(settings)
+        self.hud.configure(normalized_hud(merge_hud(self.hud._config, settings)))
+        self._hud_previews.clear()
 
     def stop(self, output: str) -> None:
         self._validate_output(output)

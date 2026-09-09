@@ -28,6 +28,9 @@ LOGGER = logging.getLogger(__name__)
 def initial_state_from_config(config: EngineConfig) -> EngineState:
     outputs = {}
     for output, profile in config.outputs.items():
+        if output == "*":
+            # Wildcard is a user intent, never a running physical output.
+            continue
         wallpaper = profile.get("wallpaper")
         performance = profile.get("performance_profile", PerformanceMode.AUTO.value)
         try:
@@ -101,6 +104,8 @@ class EngineService:
             "get_playback_state": self._get_playback_state,
             "configure_hud": self._configure_hud,
             "refresh_hud": self._refresh_hud,
+            "preview_hud": self._preview_hud,
+            "clear_hud_preview": self._clear_hud_preview,
         }
 
     def _configure_hud(self, params):
@@ -109,16 +114,22 @@ class EngineService:
         settings = params["settings"]
         self._invoke(self.playback.configure_hud, settings)
         self.config.ui["hud"] = settings
-        for output in list(self.state.snapshot().outputs):
-            try:
-                self.playback.refresh_hud(output)
-            except PlaybackError:
-                LOGGER.debug("HUD refresh failed for %s", output, exc_info=True)
-        return {"configured": True}
+        live = self.playback.refresh_hud("*")
+        return {"configured": True, "live": live}
 
     def _refresh_hud(self, params):
         output = self._output(params)
         return {"refreshed": self._invoke(self.playback.refresh_hud, output)}
+
+    def _preview_hud(self, params):
+        output = self._output(params, "settings")
+        if not isinstance(params["settings"], dict):
+            raise RPCError("invalid_params", "HUD settings must be an object")
+        return self._invoke(self.playback.preview_hud, output, params["settings"])
+
+    def _clear_hud_preview(self, params):
+        output = self._output(params)
+        return self._invoke(self.playback.clear_hud_preview, output)
 
     @staticmethod
     def _require_empty(params: dict[str, Any]) -> None:
@@ -254,23 +265,53 @@ class EngineService:
         self.server.start()
         try:
             self.state.set_service_status("running", self.config.load_error)
+            self._restore_configured_wallpapers()
             self._reconcile_running_outputs()
         except Exception:
             self.server.shutdown()
             raise
         self._started = True
+        try:
+            self.playback.start_hud()
+        except OSError:
+            LOGGER.warning("Desktop HUD could not start", exc_info=True)
         self._hud_thread = threading.Thread(
             target=self._hud_loop, name="mpvpaper-hud", daemon=True
         )
         self._hud_thread.start()
 
+    def _restore_configured_wallpapers(self) -> None:
+        """Start saved wallpapers once the graphical session is available."""
+        for output, profile in self.config.outputs.items():
+            if output == "*" or not profile.get("autostart", True):
+                continue
+            wallpaper = profile.get("wallpaper")
+            if not isinstance(wallpaper, str) or not Path(wallpaper).is_file():
+                continue
+            try:
+                self.playback.play(output, Path(wallpaper))
+            except (PlaybackError, SystemdError, OSError, ValueError) as error:
+                LOGGER.warning("Unable to restore %s wallpaper: %s", output, error)
+
+        wildcard = self.config.outputs.get("*")
+        wallpaper = wildcard.get("wallpaper") if isinstance(wildcard, dict) else None
+        if (
+            isinstance(wildcard, dict)
+            and wildcard.get("autostart", True)
+            and isinstance(wallpaper, str)
+            and Path(wallpaper).is_file()
+        ):
+            try:
+                self.playback.play("*", Path(wallpaper))
+            except (PlaybackError, SystemdError, OSError, ValueError) as error:
+                LOGGER.warning("Unable to restore wildcard wallpaper: %s", error)
+
     def _hud_loop(self):
         while not self._stop_event.wait(self._seconds_to_next_minute()):
-            for output in list(self.state.snapshot().outputs):
-                try:
-                    self.playback.refresh_hud(output)
-                except Exception:
-                    LOGGER.debug("HUD refresh failed for %s", output, exc_info=True)
+            try:
+                self.playback.refresh_hud("*")
+            except Exception:
+                LOGGER.debug("HUD refresh failed", exc_info=True)
 
     @staticmethod
     def _seconds_to_next_minute() -> float:
@@ -280,6 +321,8 @@ class EngineService:
     def _reconcile_running_outputs(self) -> None:
         """Reconstruct state once when wallpapers predate the Engine service."""
         for output in self.config.outputs:
+            if output == "*":
+                continue
             if not any(path.is_socket() for path in mpv_socket_candidates(self.paths, output)):
                 continue
             try:
@@ -291,7 +334,10 @@ class EngineService:
         if not self._started:
             return
         self._stop_event.set()
+        if self._hud_thread is not None:
+            self._hud_thread.join(timeout=5)
         self._hud_thread = None
+        self.playback.stop_hud()
         try:
             self.server.shutdown()
         finally:

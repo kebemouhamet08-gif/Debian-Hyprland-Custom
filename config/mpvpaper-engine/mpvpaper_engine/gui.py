@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import gi
@@ -15,6 +16,13 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk, WebKit
 
 from .cache import CacheManager
 from .gui_backend import GuiBackend
+from .gui_scrolling import allow_page_scroll, scrolled_window
+from .config import HUD_DEFAULTS
+from .hud_scene import draw as draw_hud
+from .hud_positioning import Rect
+from .hud_editor_geometry import (
+    canvas_from_normalized, canvas_transform, normalized_from_canvas,
+)
 from .models import Wallpaper
 from .recommendations import Recommendation
 
@@ -45,6 +53,7 @@ PAGES = (
     ("recent", "Récents", "document-open-recent-symbolic"),
     ("monitors", "Écrans", "video-display-symbolic"),
     ("settings", "Réglages", "preferences-system-symbolic"),
+    ("hud-editor", "Desktop HUD Editor", "view-fullscreen-symbolic"),
 )
 
 STYLE = """
@@ -87,6 +96,7 @@ button { border-radius: 7px; transition: background-color 180ms ease, color 180m
 button.success-download { background: #35c98a; color: #071c13; font-weight: 800; }
 button.success-like { background: #ff5277; color: #240811; font-weight: 800; }
 scale highlight { background: #ff5277; }
+.engine-scroll > scrollbar.vertical slider { min-width: 10px; min-height: 36px; }
 switch:checked { background: #ff5277; }
 """
 
@@ -275,6 +285,7 @@ class EngineWindow(Adw.ApplicationWindow):
         self.pages.add_named(self._recent_page(), "recent")
         self.pages.add_named(self._monitors_page(), "monitors")
         self.pages.add_named(self._settings_page(), "settings")
+        self.pages.add_named(self._hud_editor_page(), "hud-editor")
 
         content_toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
@@ -319,6 +330,7 @@ class EngineWindow(Adw.ApplicationWindow):
         box.append(title)
         navigation = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE,
                                  css_classes=["navigation-sidebar"])
+        self.navigation = navigation
         for name, label, icon in PAGES:
             row = Adw.ActionRow(title=label, activatable=True)
             row.page_name = name
@@ -346,7 +358,7 @@ class EngineWindow(Adw.ApplicationWindow):
                            max_children_per_line=3, valign=Gtk.Align.START,
                            halign=Gtk.Align.FILL, hexpand=True)
         flow.add_css_class("wallpaper-grid")
-        scroll = Gtk.ScrolledWindow(vexpand=True, hexpand=True, child=flow,
+        scroll = scrolled_window(vexpand=True, hexpand=True, child=flow,
                                     hscrollbar_policy=Gtk.PolicyType.NEVER,
                                     vscrollbar_policy=Gtk.PolicyType.AUTOMATIC)
         outer.append(scroll)
@@ -492,7 +504,7 @@ class EngineWindow(Adw.ApplicationWindow):
         controls.append(Gtk.Label(label="Nombre", css_classes=["heading"]))
         adjustment = Gtk.Adjustment(value=16, lower=4, upper=60,
                                     step_increment=1, page_increment=4)
-        self.suggestion_count = Gtk.SpinButton(adjustment=adjustment, numeric=True)
+        self.suggestion_count = allow_page_scroll(Gtk.SpinButton(adjustment=adjustment, numeric=True))
         self.suggestion_count.set_width_chars(3)
         controls.append(self.suggestion_count)
         controls.append(Gtk.Label(label="Qualité", css_classes=["heading"]))
@@ -541,7 +553,7 @@ class EngineWindow(Adw.ApplicationWindow):
             max_children_per_line=4, valign=Gtk.Align.START,
             halign=Gtk.Align.FILL, hexpand=True,
         )
-        scroll = Gtk.ScrolledWindow(
+        scroll = scrolled_window(
             child=self.suggestion_flow, vexpand=True, hexpand=True,
             hscrollbar_policy=Gtk.PolicyType.NEVER,
             vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
@@ -927,19 +939,19 @@ class EngineWindow(Adw.ApplicationWindow):
         box.append(controls)
         self.playlist_list = Gtk.ListBox(css_classes=["boxed-list"])
         box.append(self.playlist_list)
-        return box
+        return scrolled_window(child=box)
 
     def _recent_page(self):
         box = self._empty_page("Récents", "Historique local par date et écran.")
         self.recent_list = Gtk.ListBox(css_classes=["boxed-list"])
         box.append(self.recent_list)
-        return box
+        return scrolled_window(child=box)
 
     def _monitors_page(self):
         box = self._empty_page("Écrans", "Écrans Hyprland détectés, sans polling.")
         self.monitor_list = Gtk.ListBox(css_classes=["boxed-list"])
         box.append(self.monitor_list)
-        return box
+        return scrolled_window(child=box)
 
     def _settings_page(self):
         box = self._empty_page("Réglages", "Cache, téléchargement, thème, automatisation et options avancées.")
@@ -961,7 +973,7 @@ class EngineWindow(Adw.ApplicationWindow):
                               halign=Gtk.Align.START)
         diagnose.connect("clicked", self._diagnose_downloader)
         box.append(diagnose)
-        scroll = Gtk.ScrolledWindow(
+        scroll = scrolled_window(
             vexpand=True,
             hscrollbar_policy=Gtk.PolicyType.NEVER,
             vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
@@ -969,101 +981,455 @@ class EngineWindow(Adw.ApplicationWindow):
         scroll.set_child(box)
         return scroll
 
+    def _hud_editor_page(self):
+        self.hud_editor_output = Gtk.DropDown.new_from_strings(["Réglages globaux (*)"])
+        self.hud_editor_output.connect("notify::selected", self._hud_editor_output_changed)
+        self.hud_editor_info = Gtk.Label(xalign=0, css_classes=["dim-label"])
+        self.hud_editor_canvas = Gtk.DrawingArea(content_width=320, content_height=360,
+                                               hexpand=True)
+        self.hud_editor_canvas.set_draw_func(self._draw_hud_editor)
+        self.hud_editor_drag = Gtk.GestureDrag()
+        self.hud_editor_drag.connect("drag-begin", self._hud_editor_drag_begin)
+        self.hud_editor_drag.connect("drag-update", self._hud_editor_drag_update)
+        self.hud_editor_drag.connect("drag-end", self._hud_editor_drag_end)
+        self.hud_editor_canvas.add_controller(self.hud_editor_drag)
+
+        page = self._empty_page(
+            "Desktop HUD Editor",
+            "Widgets indépendants du fond d’écran. Aperçu temporaire ; Appliquer pour enregistrer.",
+        )
+        page.append(self._settings_row("Écran", self.hud_editor_output))
+        page.append(self.hud_editor_info)
+        page.append(self.hud_editor_canvas)
+
+        self.hud_editor_enabled = Gtk.Switch(halign=Gtk.Align.END)
+        self.hud_editor_enabled.connect("notify::active", self._hud_editor_changed)
+        self.hud_editor_x = self._hud_editor_scale(0.0, 1.0, 0.001)
+        self.hud_editor_y = self._hud_editor_scale(0.0, 1.0, 0.001)
+        self.hud_editor_scale = self._hud_editor_scale(0.5, 2.0, 0.05)
+        self.hud_editor_opacity = self._hud_editor_scale(0.0, 1.0, 0.01)
+        self.hud_editor_x.connect("value-changed", self._hud_editor_changed)
+        self.hud_editor_y.connect("value-changed", self._hud_editor_changed)
+        self.hud_editor_scale.connect("value-changed", self._hud_editor_changed)
+        self.hud_editor_opacity.connect("value-changed", self._hud_editor_changed)
+        self.hud_editor_x_value = Gtk.Label(xalign=0, css_classes=["dim-label"])
+        self.hud_editor_y_value = Gtk.Label(xalign=0, css_classes=["dim-label"])
+        page.append(self._settings_row("Position X", self.hud_editor_x))
+        page.append(self.hud_editor_x_value)
+        page.append(self._settings_row("Position Y", self.hud_editor_y))
+        page.append(self.hud_editor_y_value)
+
+        presets = Gtk.FlowBox(max_children_per_line=3, row_spacing=4, column_spacing=4)
+        for label, x, y in (
+            ("Top Left", .12, .16), ("Top Center", .5, .16), ("Top Right", .88, .16),
+            ("Center Left", .12, .5), ("Center", .5, .5), ("Center Right", .88, .5),
+            ("Bottom Left", .12, .84), ("Bottom Center", .5, .84), ("Bottom Right", .88, .84),
+        ):
+            button = Gtk.Button(label=label)
+            button.connect("clicked", self._hud_editor_preset, x, y)
+            presets.insert(button, -1)
+        page.append(Gtk.Label(label="Presets", xalign=0, css_classes=["heading"]))
+        page.append(presets)
+
+        anchors = ["top-left", "top", "top-right", "left", "center", "right",
+                   "bottom-left", "bottom", "bottom-right"]
+        self.hud_editor_anchor = Gtk.DropDown.new_from_strings(anchors)
+        self.hud_editor_anchor.connect("notify::selected", self._hud_editor_changed)
+        page.append(self._settings_row("Anchor", self.hud_editor_anchor))
+
+        self.hud_editor_avoid = Gtk.CheckButton(label="Éviter les panneaux (peut ajuster la position)", active=True)
+        self.hud_editor_snap = Gtk.CheckButton(label="Alignement automatique", active=True)
+        self.hud_editor_margin = Gtk.SpinButton.new_with_range(0, 200, 1)
+        self.hud_editor_avoid.connect("toggled", self._hud_editor_changed)
+        self.hud_editor_snap.connect("toggled", self._hud_editor_changed)
+        self.hud_editor_margin.connect("value-changed", self._hud_editor_changed)
+        page.append(self.hud_editor_avoid)
+        page.append(self.hud_editor_snap)
+        page.append(self._settings_row("Marge (pixels logiques)", self.hud_editor_margin))
+        page.append(self._settings_row("Échelle", self.hud_editor_scale))
+        page.append(self._settings_row("Opacité", self.hud_editor_opacity))
+
+        self.hud_editor_elements = {}
+        for name, label in (
+            ("greeting", "Greeting"), ("day", "Day / Anurati"), ("time", "Time"),
+            ("date", "Date"), ("japanese", "Japanese greeting"),
+            ("decorative_lines", "Decorative lines"),
+        ):
+            control = Gtk.CheckButton(label=label, active=True)
+            control.connect("toggled", self._hud_editor_changed)
+            self.hud_editor_elements[name] = control
+            page.append(control)
+        self.hud_editor_username = Gtk.Entry(placeholder_text="ムハメト・ケベ")
+        self.hud_editor_username.connect("changed", self._hud_editor_changed)
+        page.append(self._settings_row("Username", self.hud_editor_username))
+
+        self.hud_editor_colors = Gtk.DropDown.new_from_strings(["Palette du bureau", "Couleurs fixes personnalisées"])
+        self.hud_editor_colors.connect("notify::selected", self._hud_editor_changed)
+        page.append(self._settings_row("Colors", self.hud_editor_colors))
+        self.hud_editor_color_entries = {}
+        for key, label in (("primary", "Primary"), ("secondary", "Secondary"),
+                           ("accent", "Accent"), ("lines", "Lines")):
+            if hasattr(Gtk, "ColorDialogButton"):
+                entry = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog())
+                entry.connect("notify::rgba", self._hud_editor_changed)
+            else:
+                entry = Gtk.Entry(placeholder_text="#RRGGBB")
+                entry.connect("changed", self._hud_editor_changed)
+            self.hud_editor_color_entries[key] = entry
+            page.append(self._settings_row(label, entry))
+
+        actions = Gtk.Box(spacing=8, halign=Gtk.Align.END)
+        reset = Gtk.Button(label="Valeurs par défaut")
+        cancel = Gtk.Button(label="Annuler")
+        apply = Gtk.Button(label="Appliquer", css_classes=["suggested-action"])
+        reset.connect("clicked", self._hud_editor_reset)
+        cancel.connect("clicked", self._hud_editor_cancel)
+        apply.connect("clicked", self._hud_editor_apply)
+        self.hud_editor_apply_button = apply
+        actions.append(reset)
+        actions.append(cancel)
+        actions.append(apply)
+        self.hud_editor_status = Gtk.Label(xalign=0, css_classes=["dim-label"])
+        page.append(self.hud_editor_status)
+        page.append(actions)
+        self._hud_editor_pending = 0
+        self._hud_editor_revision = 0
+        self.hud_editor_output_names = ["*"]
+        self._hud_editor_dragging = False
+        self._hud_editor_drag_start = (0.5, 0.5)
+        self._hud_editor_settings = {}
+        self._hud_editor_persistent_settings = {}
+        self._hud_editor_dirty = False
+        self._hud_editor_loading = False
+        return scrolled_window(child=page, vexpand=True,
+                                  hscrollbar_policy=Gtk.PolicyType.NEVER)
+
+    @staticmethod
+    def _hud_editor_scale(minimum, maximum, step):
+        scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, minimum, maximum, step)
+        scale.set_digits(3)
+        return scale
+
+    def _hud_editor_output_name(self):
+        index = self.hud_editor_output.get_selected()
+        return self.hud_editor_output_names[index] if index < len(self.hud_editor_output_names) else "*"
+
+    def _hud_editor_output_changed(self, *_args):
+        if self._hud_editor_loading:
+            return
+        old = getattr(self, "_hud_editor_active_output", "*")
+        if old != self._hud_editor_output_name():
+            try:
+                self.backend.clear_hud_preview(old)
+            except Exception as error:
+                self._failed(error)
+        self._hud_editor_load(self._hud_editor_output_name())
+
+    def _hud_editor_load(self, output):
+        if self._hud_editor_pending:
+            GLib.source_remove(self._hud_editor_pending)
+            self._hud_editor_pending = 0
+        self._hud_editor_revision = self.backend.reserve_hud_preview()
+        self._hud_editor_active_output = output
+        self._hud_editor_loading = True
+        state = self.backend.hud_editor_state(output)
+        self._hud_editor_dirty = False
+        self._hud_editor_set_controls(state["settings"])
+        self._hud_editor_settings = self._hud_editor_collect()
+        self._hud_editor_persistent_settings = deepcopy(self._hud_editor_settings)
+        self._hud_editor_update_canvas(state)
+        self._hud_editor_loading = False
+        self._hud_editor_update_dirty()
+
+    def _hud_editor_set_controls(self, settings):
+        position = settings.get("position", {})
+        self.hud_editor_enabled.set_active(settings.get("enabled", True) is True)
+        self.hud_editor_x.set_value(float(position.get("x", .18)))
+        self.hud_editor_y.set_value(float(position.get("y", .30)))
+        self.hud_editor_scale.set_value(float(settings.get("scale", 1.0)))
+        self.hud_editor_opacity.set_value(float(settings.get("opacity", 1.0)))
+        anchors = ["top-left", "top", "top-right", "left", "center", "right",
+                   "bottom-left", "bottom", "bottom-right"]
+        self.hud_editor_anchor.set_selected(
+            anchors.index(settings.get("anchor", "center"))
+            if settings.get("anchor", "center") in anchors else 4
+        )
+        self.hud_editor_avoid.set_active(settings.get("avoid_layers", True) is not False)
+        self.hud_editor_snap.set_active(settings.get("snap", True) is not False)
+        self.hud_editor_margin.set_value(float(settings.get("safe_margin", 24)))
+        elements = settings.get("elements", {})
+        for name, control in self.hud_editor_elements.items():
+            control.set_active(elements.get(name, True) is not False)
+        self.hud_editor_username.set_text(str(settings.get("username", "ムハメト・ケベ")))
+        colors = settings.get("colors", {})
+        modes = {"wallpaper": 0, "system": 0, "custom": 1}
+        self.hud_editor_colors.set_selected(modes.get(colors.get("mode"), 0))
+        custom = colors.get("custom", {}) if isinstance(colors, dict) else {}
+        for key, entry in self.hud_editor_color_entries.items():
+            value = custom.get(
+                key, custom.get({"primary": "text", "secondary": "muted"}.get(key, key), "")
+            )
+            if hasattr(entry, "set_rgba"):
+                rgba = Gdk.RGBA()
+                defaults = {"primary": "#FFFFFF", "secondary": "#CCCCCC", "accent": "#FF5577", "lines": "#CCCCCC"}
+                rgba.parse(value if isinstance(value, str) and value else defaults[key])
+                entry.set_rgba(rgba)
+            else:
+                entry.set_text(str(value))
+
+    def _hud_editor_collect(self):
+        anchors = ["top-left", "top", "top-right", "left", "center", "right",
+                   "bottom-left", "bottom", "bottom-right"]
+        mode = ("system", "custom")[self.hud_editor_colors.get_selected()]
+        custom = {}
+        for key, entry in self.hud_editor_color_entries.items():
+            if hasattr(entry, "get_rgba"):
+                rgba = entry.get_rgba()
+                custom[key] = (
+                    f"#{round(rgba.red * 255):02X}{round(rgba.green * 255):02X}"
+                    f"{round(rgba.blue * 255):02X}"
+                )
+            else:
+                custom[key] = entry.get_text()
+        return {
+            "enabled": self.hud_editor_enabled.get_active(),
+            "position": {"x": self.hud_editor_x.get_value(), "y": self.hud_editor_y.get_value()},
+            "anchor": anchors[self.hud_editor_anchor.get_selected()],
+            "safe_margin": int(self.hud_editor_margin.get_value()),
+            "avoid_layers": self.hud_editor_avoid.get_active(),
+            "snap": self.hud_editor_snap.get_active(),
+            "scale": self.hud_editor_scale.get_value(),
+            "opacity": self.hud_editor_opacity.get_value(),
+            "username": self.hud_editor_username.get_text()[:80],
+            "elements": {name: control.get_active()
+                         for name, control in self.hud_editor_elements.items()},
+            "colors": {
+                "mode": mode,
+                "custom": custom,
+            },
+        }
+
+    def _hud_editor_changed(self, *_args):
+        if self._hud_editor_loading:
+            return
+        self._hud_editor_revision = self.backend.reserve_hud_preview()
+        self._hud_editor_settings = self._hud_editor_collect()
+        self._hud_editor_dirty = self._hud_editor_settings != self._hud_editor_persistent_settings
+        self._hud_editor_update_dirty()
+        if self._hud_editor_pending:
+            GLib.source_remove(self._hud_editor_pending)
+        self._hud_editor_pending = GLib.timeout_add(75, self._hud_editor_preview)
+
+    def _hud_editor_preview_immediately(self):
+        if self._hud_editor_pending:
+            GLib.source_remove(self._hud_editor_pending)
+            self._hud_editor_pending = 0
+        self._hud_editor_preview()
+
+    def _hud_editor_preview(self):
+        self._hud_editor_pending = 0
+        output = self._hud_editor_active_output
+        settings = deepcopy(self._hud_editor_settings)
+        revision = self._hud_editor_revision
+        self.tasks.run(
+            lambda: (self.backend.hud_editor_preview_data(output, settings),
+                     self.backend.preview_hud(output, settings, revision)),
+            lambda result: self._hud_editor_preview_done(result[0], revision, result[1]),
+            self._failed,
+        )
+        return False
+
+    def _hud_editor_preview_done(self, data, revision, response):
+        if revision != self._hud_editor_revision:
+            return False
+        self._hud_editor_update_canvas(data)
+        if not response.get("previewed"):
+            self.hud_editor_status.set_text("Aperçu local uniquement : vérifier le service et le support HUD Wayland.")
+        return False
+
+    def _hud_editor_update_dirty(self):
+        if hasattr(self, "hud_editor_apply_button"):
+            self.hud_editor_apply_button.set_sensitive(self._hud_editor_dirty)
+        if hasattr(self, "hud_editor_x_value"):
+            self.hud_editor_x_value.set_text(f"X = {self.hud_editor_x.get_value():.3f}")
+            self.hud_editor_y_value.set_text(f"Y = {self.hud_editor_y.get_value():.3f}")
+
+    def _hud_editor_drag_begin(self, _gesture, x, y):
+        if self._hud_editor_loading or not getattr(self, "_hud_editor_data", {}).get("monitor"):
+            return
+        monitor = self._hud_editor_data["monitor"]
+        width = max(1, self.hud_editor_canvas.get_width())
+        height = max(1, self.hud_editor_canvas.get_height())
+        rect = self._hud_editor_data.get("hud_rect")
+        if not rect:
+            return
+        ox, oy, scale = canvas_transform(monitor, width, height)
+        if not (ox + rect["x"] * scale <= x <= ox + (rect["x"] + rect["width"]) * scale
+                and oy + rect["y"] * scale <= y <= oy + (rect["y"] + rect["height"]) * scale):
+            return
+        position = self._hud_editor_data["positioning"]["resolved"]
+        self._hud_editor_dragging = True
+        self._hud_editor_drag_start = (
+            float(position.get("x", 0.5)), float(position.get("y", 0.5))
+        )
+
+    def _hud_editor_drag_update(self, _gesture, offset_x, offset_y):
+        if not self._hud_editor_dragging:
+            return
+        monitor = self._hud_editor_data.get("monitor")
+        if not monitor:
+            return
+        width = max(1, self.hud_editor_canvas.get_width())
+        height = max(1, self.hud_editor_canvas.get_height())
+        start_x, start_y = canvas_from_normalized(
+            *self._hud_editor_drag_start, monitor, width, height
+        )
+        x, y = normalized_from_canvas(
+            start_x + offset_x, start_y + offset_y, monitor, width, height
+        )
+        self._hud_editor_loading = True
+        self.hud_editor_x.set_value(x)
+        self.hud_editor_y.set_value(y)
+        self._hud_editor_loading = False
+        self._hud_editor_changed()
+
+    def _hud_editor_drag_end(self, gesture, offset_x, offset_y):
+        if not self._hud_editor_dragging:
+            return
+        self._hud_editor_drag_update(gesture, offset_x, offset_y)
+        self._hud_editor_dragging = False
+        self._hud_editor_preview_immediately()
+
+    def _hud_editor_preset(self, _button, x, y):
+        self.hud_editor_x.set_value(x)
+        self.hud_editor_y.set_value(y)
+
+    def _hud_editor_reset(self, _button):
+        self._hud_editor_loading = True
+        self._hud_editor_set_controls(HUD_DEFAULTS)
+        self._hud_editor_loading = False
+        self._hud_editor_changed()
+
+    def _hud_editor_cancel(self, _button):
+        if self._hud_editor_pending:
+            GLib.source_remove(self._hud_editor_pending)
+            self._hud_editor_pending = 0
+        output = self._hud_editor_active_output
+        self._hud_editor_revision = self.backend.reserve_hud_preview()
+        try:
+            self.backend.clear_hud_preview(output)
+            self._hud_editor_load(output)
+            self.hud_editor_status.set_text("Aperçu annulé.")
+        except Exception as error:
+            self.hud_editor_status.set_text(f"Annulation impossible : {error}")
+
+    def _hud_editor_apply(self, _button):
+        if self._hud_editor_pending:
+            GLib.source_remove(self._hud_editor_pending)
+            self._hud_editor_pending = 0
+        settings = self._hud_editor_collect()
+        self._hud_editor_revision = self.backend.reserve_hud_preview()
+        try:
+            self.backend.commit_hud_preview(settings, self._hud_editor_active_output)
+        except Exception as error:
+            self.hud_editor_status.set_text(f"Enregistrement impossible : {error}")
+            return
+        self._hud_editor_persistent_settings = deepcopy(settings)
+        self._hud_editor_dirty = False
+        self._hud_editor_update_dirty()
+        self._hud_editor_load(self._hud_editor_active_output)
+        self.hud_editor_status.set_text("HUD enregistré et appliqué." if self.backend.hud_live
+                                        else "HUD enregistré. Le service HUD doit être démarré pour l’afficher.")
+
+    def _hud_editor_update_canvas(self, data):
+        self._hud_editor_data = data
+        monitor = data.get("monitor")
+        if monitor:
+            self.hud_editor_info.set_text(
+                f"{monitor['name']} · {monitor['width']}×{monitor['height']} · "
+                f"ratio {data['ratio']:.3f}"
+            )
+        else:
+            self.hud_editor_info.set_text("Aucun moniteur détecté.")
+        positioning = data.get("positioning", {})
+        resolved = positioning.get("resolved", {})
+        self.hud_editor_status.set_text("Aperçu temporaire — Appliquer pour enregistrer.")
+        if positioning.get("limited"):
+            self.hud_editor_status.set_text("Le HUD dépasse l’écran : réduire l’échelle pour le voir entièrement.")
+        elif positioning.get("collision"):
+            self.hud_editor_status.set_text(
+                f"Position ajustée pour les panneaux : X={resolved['x']:.3f}, Y={resolved['y']:.3f}. "
+                "Désactiver l’évitement pour conserver la position exacte.")
+        elif positioning.get("snapped"):
+            self.hud_editor_status.set_text("Position alignée par snap.")
+        fonts = data.get("fonts", {})
+        if fonts and not fonts.get("Anurati", True):
+            self.hud_editor_status.set_text("Avertissement : Anurati est absente, fallback actif.")
+        self._hud_editor_update_dirty()
+        self.hud_editor_canvas.queue_draw()
+
+    def _draw_hud_editor(self, _area, context, width, height):
+        data = getattr(self, "_hud_editor_data", {})
+        monitor = data.get("monitor")
+        if not monitor:
+            return
+        ox, oy, scale = canvas_transform(monitor, width, height)
+        context.rectangle(ox, oy, monitor["width"] * scale, monitor["height"] * scale)
+        context.set_source_rgba(0.06, 0.07, 0.09, 1)
+        context.fill()
+        for rect in data.get("layers", []):
+            context.rectangle(ox + rect["x"] * scale, oy + rect["y"] * scale,
+                              rect["width"] * scale, rect["height"] * scale)
+            context.set_source_rgba(0.85, 0.18, 0.35, 0.35)
+            context.fill()
+        safe = data.get("safe_area")
+        if safe:
+            context.rectangle(ox + safe["x"] * scale, oy + safe["y"] * scale,
+                              safe["width"] * scale, safe["height"] * scale)
+            context.set_source_rgba(0.25, 0.75, 0.55, 0.7)
+            context.set_line_width(2)
+            context.stroke()
+        settings = data.get("render_settings", data.get("settings", {}))
+        rect = data.get("hud_rect")
+        if rect:
+            context.save()
+            context.rectangle(ox, oy, monitor["width"] * scale, monitor["height"] * scale)
+            context.clip()
+            context.translate(ox, oy)
+            context.scale(scale, scale)
+            draw_hud(context, settings, Rect(**rect), data.get("palette"))
+            context.restore()
+
     def _hud_settings_section(self):
         section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10,
                           css_classes=["inspector-section"])
         section.append(Gtk.Label(label="Desktop HUD", xalign=0,
                                  css_classes=["title-2"]))
         section.append(Gtk.Label(
-            label="Affiche le greeting, l’heure, la date et le texte japonais au-dessus du wallpaper.",
+            label="Horloge et textes indépendants de la lecture du fond d’écran. Les réglages sont réunis dans un seul éditeur.",
             xalign=0, wrap=True, css_classes=["dim-label"],
         ))
 
-        settings = self.backend.hud_settings()
-        self.hud_enabled = Gtk.Switch(
-            active=settings.get("enabled", True) is True,
-            halign=Gtk.Align.END,
-        )
-        self.hud_enabled.connect("notify::active", self._hud_changed)
-        section.append(self._settings_row("Activer le HUD", self.hud_enabled))
-
-        position = settings.get("position", {})
-        self.hud_x = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.05, 0.95, 0.01)
-        self.hud_x.set_value(float(position.get("x", 0.18)))
-        self.hud_x.set_digits(2)
-        self.hud_x.connect("value-changed", self._hud_changed)
-        section.append(self._settings_row("Position horizontale", self.hud_x))
-        self.hud_y = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.10, 0.90, 0.01)
-        self.hud_y.set_value(float(position.get("y", 0.30)))
-        self.hud_y.set_digits(2)
-        self.hud_y.connect("value-changed", self._hud_changed)
-        section.append(self._settings_row("Position verticale", self.hud_y))
-
-        self.hud_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.5, 2.0, 0.05)
-        self.hud_scale.set_value(float(settings.get("scale", 1.0)))
-        self.hud_scale.set_digits(2)
-        self.hud_scale.connect("value-changed", self._hud_changed)
-        section.append(self._settings_row("Échelle", self.hud_scale))
-        self.hud_opacity = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.15, 1.0, 0.05)
-        self.hud_opacity.set_value(float(settings.get("opacity", 1.0)))
-        self.hud_opacity.set_digits(2)
-        self.hud_opacity.connect("value-changed", self._hud_changed)
-        section.append(self._settings_row("Opacité", self.hud_opacity))
-
-        elements = settings.get("elements", {})
-        self.hud_elements = {}
-        for name, label in (
-            ("greeting", "Greeting"),
-            ("day", "Jour · police Anurati"),
-            ("time", "Heure"),
-            ("date", "Date"),
-            ("japanese", "Texte japonais"),
-            ("decorative_lines", "Lignes décoratives"),
-        ):
-            control = Gtk.CheckButton(label=label)
-            control.set_active(elements.get(name, True) is not False)
-            control.connect("toggled", self._hud_changed)
-            self.hud_elements[name] = control
-            section.append(control)
-
-        self.hud_username = Gtk.Entry(
-            text=str(settings.get("username", "ムハメト・ケベ")),
-            placeholder_text="Texte japonais ou nom affiché",
-        )
-        self.hud_username.connect("changed", self._hud_changed)
-        section.append(self._settings_row("Nom", self.hud_username))
-
-        self.hud_status = Gtk.Label(label="Modifications enregistrées automatiquement.",
-                                    xalign=0, css_classes=["dim-label"])
-        section.append(self.hud_status)
+        button = Gtk.Button(label="Ouvrir l’éditeur HUD")
+        button.connect("clicked", self._open_hud_editor)
+        section.append(button)
         return section
+
+    def _open_hud_editor(self, _button):
+        row = self.navigation.get_first_child()
+        while row is not None:
+            if row.page_name == "hud-editor":
+                self.navigation.select_row(row)
+                return
+            row = row.get_next_sibling()
 
     @staticmethod
     def _settings_row(label, child):
+        allow_page_scroll(child)
         row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         row.append(Gtk.Label(label=label, xalign=0, css_classes=["heading"]))
         row.append(child)
         return row
-
-    def _hud_changed(self, _control, *_args):
-        if not hasattr(self, "hud_enabled"):
-            return
-        settings = {
-            "enabled": self.hud_enabled.get_active(),
-            "position": {"x": self.hud_x.get_value(), "y": self.hud_y.get_value()},
-            "scale": self.hud_scale.get_value(),
-            "opacity": self.hud_opacity.get_value(),
-            "username": self.hud_username.get_text()[:80],
-            "elements": {
-                name: control.get_active()
-                for name, control in self.hud_elements.items()
-            },
-        }
-        try:
-            self.backend.configure_hud(settings)
-            self.hud_status.set_text("HUD enregistré et actualisé.")
-        except Exception as error:
-            self.hud_status.set_text(f"Impossible d’enregistrer le HUD : {error}")
 
     @staticmethod
     def _empty_page(title, subtitle):
@@ -1075,7 +1441,7 @@ class EngineWindow(Adw.ApplicationWindow):
         return box
 
     def _inspector(self):
-        scroll = Gtk.ScrolledWindow(width_request=350)
+        scroll = scrolled_window(width_request=350)
         scroll.add_css_class("inspector-pane")
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14,
                       margin_top=20, margin_bottom=20, margin_start=18, margin_end=18)
@@ -1134,6 +1500,7 @@ class EngineWindow(Adw.ApplicationWindow):
 
     @staticmethod
     def _section(title, child):
+        allow_page_scroll(child)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6,
                       css_classes=["inspector-section"])
         box.append(Gtk.Label(label=title, xalign=0, css_classes=["heading"]))
@@ -1161,6 +1528,8 @@ class EngineWindow(Adw.ApplicationWindow):
             self.refresh_outputs()
         elif row.page_name == "settings":
             self._diagnose_downloader()
+        elif row.page_name == "hud-editor":
+            self._hud_editor_load(self._hud_editor_output_name())
 
     def reload(self, *, scan):
         query = self.search.get_text() if hasattr(self, "search") else ""
@@ -1296,6 +1665,18 @@ class EngineWindow(Adw.ApplicationWindow):
         for monitor in monitors:
             resolution = f"{monitor.width or '?'}×{monitor.height or '?'} · {monitor.refresh_rate or '?'} Hz"
             self.monitor_list.append(Adw.ActionRow(title=monitor.name, subtitle=resolution))
+        if hasattr(self, "hud_editor_output"):
+            names = ["*", *(item.name for item in monitors)]
+            if names != self.hud_editor_output_names:
+                previous = self._hud_editor_output_name()
+                self._hud_editor_loading = True
+                self.hud_editor_output_names = names
+                self.hud_editor_output.set_model(Gtk.StringList.new(
+                    ["Réglages globaux (*)", *(item.name for item in monitors)]))
+                self.hud_editor_output.set_selected(names.index(previous) if previous in names else 0)
+                self._hud_editor_loading = False
+                if previous not in names or not self._hud_editor_settings:
+                    self._hud_editor_output_changed()
         return False
 
     def _create_playlist(self, _button):
@@ -1407,6 +1788,15 @@ class EngineWindow(Adw.ApplicationWindow):
         return False
 
     def _close(self, _window):
+        if hasattr(self, "_hud_editor_active_output"):
+            if self._hud_editor_pending:
+                GLib.source_remove(self._hud_editor_pending)
+                self._hud_editor_pending = 0
+            self._hud_editor_revision = self.backend.reserve_hud_preview()
+            try:
+                self.backend.clear_hud_preview(self._hud_editor_active_output)
+            except Exception:
+                pass
         self.tasks.close()
         return False
 

@@ -68,17 +68,30 @@ class ThemeSyncTests(unittest.TestCase):
     def test_integrations_are_failure_isolated_and_state_is_written(self):
         palette = Palette(("#101010", "#eeeeee"), "#eeeeee", "#101010", str(self.media), 4)
         runner = mock.Mock(side_effect=[
+            subprocess.CompletedProcess([], 1, "", "no wallust"),
             OSError("no waybar"),
             subprocess.CompletedProcess([], 0, "", ""),
-            subprocess.CompletedProcess([], 1, "", "no wallust"),
         ])
         result = ThemeSync(
             self.paths, extractor=lambda _source, frames: palette, runner=runner
         ).apply(self.media)
         self.assertTrue(result.applied)
-        self.assertTrue(result.integrations["waybar"].startswith("failed:"))
+        self.assertTrue(result.integrations["wallust"].startswith("failed:"))
+        self.assertIn("failed:", result.integrations["waybar"])
         self.assertEqual(result.integrations["nova"], "ok")
         self.assertTrue(self.paths.palette_dir.joinpath("current.json").is_file())
+
+    def test_waybar_file_is_updated_before_reload(self):
+        palette = Palette(("#204060", "#d0d0d0"), "#d0d0d0", "#101010", str(self.media), 4)
+        runner = mock.Mock(return_value=subprocess.CompletedProcess([], 0, "", ""))
+        result = ThemeSync(
+            self.paths, extractor=lambda _source, frames: palette, runner=runner
+        ).apply(self.media)
+        self.assertTrue(result.applied)
+        panel = self.paths.config_home.parent / "waybar" / "panel-colors.css"
+        self.assertIn("@define-color accent #204060;", panel.read_text())
+        calls = [call.args[0][0] for call in runner.call_args_list]
+        self.assertEqual(calls, ["wallust", "pkill", "qs"])
 
     def test_same_wallpaper_is_guarded_across_instances(self):
         palette = Palette(("#000000",), "#000000", "#000000", str(self.media), 2)

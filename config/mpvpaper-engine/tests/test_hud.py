@@ -18,6 +18,7 @@ class HudTests(unittest.TestCase):
         self.assertIn("Style: Anurati", content)
         self.assertIn("Noto Sans CJK JP", content)
         self.assertIn("ムハメト・ケベ", content)
+        self.assertIn("Style: Anurati,Anurati,56,&H00FFFFFF", content)
 
     def test_disabled_elements_do_not_shift_styles(self):
         content = make_ass(1920, 1080, HudSettings(day=False, japanese=False), {
@@ -41,6 +42,21 @@ class HudTests(unittest.TestCase):
             path = manager.render("eDP-1")
             self.assertIsNotNone(path)
             self.assertIn("&H004433FF", path.read_text(encoding="utf-8"))
+
+    def test_custom_colors_and_output_override_are_used(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            manager = HudManager(root / "cache", root / "config")
+            manager.configure({
+                "enabled": True,
+                "colors": {"mode": "custom", "custom": {
+                    "text": "#123456", "muted": "#654321", "accent": "#ABCDEF",
+                }},
+                "outputs": {"HDMI-A-1": {"position": {"x": 0.8, "y": 0.7}}},
+            })
+            self.assertEqual(manager.settings_for_output("HDMI-A-1").x, 0.8)
+            path = manager.render("HDMI-A-1", 1366, 768)
+            self.assertIn("&H00563412", path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

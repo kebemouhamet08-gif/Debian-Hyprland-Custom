@@ -12,6 +12,9 @@ from mpvpaper_engine.gui_backend import GuiBackend  # noqa: E402
 from mpvpaper_engine.library import Library  # noqa: E402
 from mpvpaper_engine.metadata import MediaMetadata  # noqa: E402
 from mpvpaper_engine.models import MediaType  # noqa: E402
+from mpvpaper_engine.monitors import MonitorInfo  # noqa: E402
+from mpvpaper_engine.hud_layers import HudLayer  # noqa: E402
+from mpvpaper_engine.hud_positioning import Rect  # noqa: E402
 from mpvpaper_engine.paths import EnginePaths  # noqa: E402
 
 
@@ -64,6 +67,11 @@ class GuiBackendTests(unittest.TestCase):
         )
         self.assertEqual(self.backend.history.list(output="DP-1")[0].wallpaper_id,
                          self.wallpaper.id)
+        saved = json.loads(self.paths.config_file.read_text())
+        self.assertEqual(
+            saved["outputs"]["DP-1"]["wallpaper"], str(self.wallpaper.path)
+        )
+        self.assertTrue(saved["outputs"]["DP-1"]["autostart"])
 
     def test_live_controls_are_dispatched_to_single_backend(self):
         self.backend.playback("volume", "DP-1", 33)
@@ -83,11 +91,108 @@ class GuiBackendTests(unittest.TestCase):
 
         self.backend.configure_hud(settings)
 
-        self.assertEqual(self.backend.hud_settings(), settings)
-        self.client.configure_hud.assert_called_once_with(settings)
+        saved = self.backend.hud_settings()
+        for key, value in settings.items():
+            if key == "elements":
+                self.assertFalse(saved[key]["time"])
+            else:
+                self.assertEqual(saved[key], value)
+        self.client.configure_hud.assert_called_once_with(saved)
         self.assertEqual(
-            json.loads(self.paths.config_file.read_text())["ui"]["hud"], settings
+            json.loads(self.paths.config_file.read_text())["ui"]["hud"], saved
         )
+
+    def test_hud_preview_facade_does_not_persist_and_commit_does(self):
+        settings = {"enabled": True, "position": {"x": 0.7, "y": 0.6}}
+        self.backend.preview_hud("DP-1", settings)
+        self.client.preview_hud.assert_called_once_with("DP-1", settings)
+        self.assertFalse(self.paths.config_file.exists())
+
+        self.backend.clear_hud_preview("DP-1")
+        self.client.clear_hud_preview.assert_called_once_with("DP-1")
+        self.backend.commit_hud_preview(settings)
+        self.client.configure_hud.assert_called_once_with(self.backend.hud_settings())
+        self.assertTrue(self.paths.config_file.exists())
+
+    def test_hud_partial_edit_keeps_colors_and_other_screen_settings(self):
+        self.backend.configure_hud({"colors": {"mode": "custom", "custom": {"accent": "#123456"}},
+                                    "outputs": {"DP-2": {"scale": 1.7}}})
+        self.backend.configure_hud({"position": {"x": .73}})
+        saved = self.backend.hud_settings()
+        self.assertEqual(saved["colors"]["custom"]["accent"], "#123456")
+        self.assertEqual(saved["outputs"]["DP-2"]["scale"], 1.7)
+        self.assertEqual(saved["position"]["x"], .73)
+        self.assertEqual(saved["position"]["y"], .3)
+
+    def test_stale_preview_cannot_override_apply_or_cancel(self):
+        revision = self.backend.reserve_hud_preview()
+        self.backend.commit_hud_preview({"position": {"x": .8}})
+        response = self.backend.preview_hud("*", {"position": {"x": .1}}, revision)
+        self.assertTrue(response["stale"])
+        self.client.preview_hud.assert_not_called()
+        revision = self.backend.reserve_hud_preview()
+        self.backend.clear_hud_preview("*")
+        self.assertTrue(self.backend.preview_hud("*", {}, revision)["stale"])
+        self.client.preview_hud.assert_not_called()
+
+    def test_hud_editor_and_renderer_share_scaled_geometry(self):
+        from mpvpaper_engine.hud_scene import geometry, logical_screen
+        monitor = MonitorInfo("DP-1", 3840, 2160, x=-1920, y=0, scale=2)
+        self.backend.monitor_detector = lambda: [monitor]
+        self.backend.layer_detector = lambda: []
+        settings = {"enabled": True, "position": {"x": .4, "y": .6},
+                    "anchor": "bottom-right", "scale": .75, "snap": False, "avoid_layers": False}
+        state = self.backend.hud_editor_preview_data("DP-1", settings)
+        expected = geometry(settings, logical_screen(monitor))["rect"]
+        self.assertEqual(state["monitor"]["width"], 1920)
+        self.assertEqual(state["hud_rect"], {"x": expected.x + 1920, "y": expected.y,
+                                             "width": expected.width, "height": expected.height})
+
+    def test_hud_save_preserves_wallpaper_changed_by_another_client(self):
+        from mpvpaper_engine.config import load_config, save_config
+        self.backend.configure_hud({"scale": 1.1})
+        external = load_config(self.paths)
+        external.outputs["DP-9"] = {"wallpaper": "/new/wallpaper.png"}
+        save_config(external, self.paths)
+        self.backend.configure_hud({"opacity": .7})
+        saved = load_config(self.paths)
+        self.assertEqual(saved.outputs["DP-9"]["wallpaper"], "/new/wallpaper.png")
+
+    def test_hud_editor_state_exposes_geometry_layers_and_safe_area(self):
+        monitor = MonitorInfo("eDP-1", 1920, 1080, x=0, y=0, focused=True)
+        layer = HudLayer("eDP-1", "waybar", Rect(0, 0, 1920, 36), "top")
+        backend = GuiBackend(
+            self.paths, library=self.library, client=self.client,
+            monitor_detector=lambda: [monitor], layer_detector=lambda: [layer],
+            library_roots=(self.root,), theme_sync=self.theme_sync,
+        )
+        state = backend.hud_editor_state("eDP-1")
+        self.assertEqual(state["monitor"]["width"], 1920)
+        self.assertEqual(state["layers"][0]["height"], 36)
+        self.assertEqual(state["safe_area"]["y"], 60)
+        self.assertAlmostEqual(state["ratio"], 1920 / 1080)
+
+    def test_hud_editor_wildcard_uses_focused_monitor_and_handles_no_monitors(self):
+        monitor = MonitorInfo("HDMI-A-1", 2560, 1440, focused=True)
+        backend = GuiBackend(
+            self.paths, library=self.library, client=self.client,
+            monitor_detector=lambda: [monitor], layer_detector=lambda: [],
+            library_roots=(self.root,), theme_sync=self.theme_sync,
+        )
+        self.assertEqual(backend.hud_editor_state("*")["monitor"]["name"], "HDMI-A-1")
+        empty = GuiBackend(
+            self.paths, library=self.library, client=self.client,
+            monitor_detector=lambda: [], layer_detector=lambda: [],
+            library_roots=(self.root,), theme_sync=self.theme_sync,
+        )
+        self.assertIsNone(empty.hud_editor_state("*")["monitor"])
+
+    def test_hud_editor_apply_persists_selected_output_override(self):
+        settings = {"enabled": True, "position": {"x": 0.8, "y": 0.6}}
+        self.backend.commit_hud_preview(settings, "HDMI-A-1")
+        saved = json.loads(self.paths.config_file.read_text())
+        self.assertEqual(saved["ui"]["hud"]["outputs"]["HDMI-A-1"], settings)
+        self.client.configure_hud.assert_called_once()
 
     def test_pasted_url_is_sent_to_discovery_downloader(self):
         downloader = mock.Mock()

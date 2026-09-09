@@ -16,6 +16,7 @@ from typing import Any
 
 from .models import ColorProfile, OutputMode
 from .paths import EnginePaths
+from .hud import normalized_hud
 
 
 CURRENT_SCHEMA_VERSION = 2
@@ -39,8 +40,20 @@ CANONICAL_DEFAULTS = {
     "auto_pause": True, "autostart": True, "performance_profile": "auto",
     "color_profile": "Original", "theme_sync": "off", **COLOR_DEFAULTS,
 }
-HUD_DEFAULTS = {"enabled": True, "position": {"x": 0.18, "y": 0.30}, "scale": 1.0,
-                "opacity": 1.0, "username": "ムハメト・ケベ", "elements": {}}
+HUD_DEFAULTS = {
+    "enabled": True,
+    "position": {"x": 0.18, "y": 0.30},
+    "scale": 1.0,
+    "opacity": 1.0,
+    "username": "ムハメト・ケベ",
+    "elements": {},
+    "colors": {"mode": "system", "custom": {}},
+    "anchor": "center",
+    "safe_margin": 24,
+    "snap": True,
+    "avoid_layers": True,
+    "outputs": {},
+}
 LEGACY_KEYS = frozenset((*LEGACY_DEFAULT_CONFIG, "assignments"))
 
 
@@ -112,6 +125,18 @@ def _canonical_profile(source, base=None):
         low, high = ((1000, 40000) if key == "temperature" else (-100, 100))
         profile[key] = bounded_number(source.get(key), profile[key], low, high)
     return profile
+
+
+def _merge_hud_defaults(value):
+    """Fill new HUD fields without replacing settings from older configurations."""
+    source = deepcopy(value) if isinstance(value, dict) else {}
+    merged = deepcopy(HUD_DEFAULTS)
+    merged.update({key: value for key, value in source.items()
+                   if key not in {"position", "elements", "colors"}})
+    for key in ("position", "elements", "colors"):
+        if isinstance(source.get(key), dict):
+            merged[key].update(deepcopy(source[key]))
+    return normalized_hud(merged)
 
 
 def normalize_legacy_profile(data, output="*"):
@@ -197,7 +222,7 @@ def normalize_v2_config(data):
         key: deepcopy(raw.get(key)) if isinstance(raw.get(key), dict) else {}
         for key in ("automation", "cache", "theme_sync", "ui")
     }
-    sections["ui"].setdefault("hud", deepcopy(HUD_DEFAULTS))
+    sections["ui"]["hud"] = _merge_hud_defaults(sections["ui"].get("hud"))
     return EngineConfig(
         mode=mode, defaults=defaults, outputs=outputs, color_profiles=colors,
         selected_output=selected_output, selected_profile=selected,

@@ -1,24 +1,36 @@
 # Deblestia — Debian × Caelestia
 
-Ce dépôt conserve trois interfaces : **Custom Debian V2 Immersive**,
-**Deblestia Nova 2** et **Nova Shell Custom Debian**. MPVpaper Engine, PeriphX et
-MirrorBridge restent des composants indépendants, sans constituer des modes UI.
+Ce dépôt regroupe **Deblestia Bar**, **Deblestia Nova**, **Deblestia Nova Lite**,
+**Deblestia Shell**, **MPVpaper Engine**, **PeriphX** et **MirrorBridge**. Les
+commandes historiques, dont Deblestia Nova 2, restent disponibles pour préserver
+les installations existantes.
 
-## Installation guidée
+## 🎬 Démonstration Deblestia
 
-Cette méthode télécharge le dépôt, affiche les composants par leur vrai nom,
-vérifie les prérequis lorsque l'installateur le permet, puis demande confirmation
-avant l'installation. Copiez-collez le bloc complet :
+<p align="center">
+  <a href="https://youtu.be/tgntfMrhgew">
+    <img src="https://img.youtube.com/vi/tgntfMrhgew/maxresdefault.jpg"
+         alt="Démonstration Deblestia sur YouTube" width="800">
+  </a>
+</p>
+
+## Installation simple
+
+Deblestia Setup analyse la machine, recommande un profil et conserve GNOME ainsi
+que le gestionnaire de connexion existant. Il affiche le plan complet avant une
+unique confirmation :
 
 ```bash
 git clone --depth 1 https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git
 cd Debian-Hyprland-Custom
-./installation-guidee.sh
+./install.sh
 ```
 
-Le menu peut aussi être contourné en indiquant directement le composant, par
-exemple `./installation-guidee.sh periphx`. L'installation reste locale au compte
-utilisateur, sauf lorsqu'une dépendance système doit être installée séparément.
+Le diagnostic seul est disponible avec `./install.sh diagnostic`. Les modes
+automatique, manuel, contribution et désinstallation sont accessibles depuis le
+menu. L'ancien `./installation-guidee.sh` reste compatible pour installer un
+composant séparément. Voir le [démarrage rapide](docs/installation/QUICKSTART.md)
+et le [guide VirtualBox](docs/installation/VIRTUALBOX.md).
 
 ## Télécharger et installer un seul composant
 
@@ -27,7 +39,36 @@ Git. Il télécharge le script racine et uniquement la partie de `config/` néce
 Exécutez un bloc à la fois depuis le dossier dans lequel vous souhaitez conserver
 les sources.
 
-### Deblestia Nova 2
+### Deblestia Bar
+
+```bash
+./install-deblestia-bar.sh check
+./install-deblestia-bar.sh install
+```
+
+### Deblestia Nova
+
+```bash
+./install-deblestia-nova.sh check
+./install-deblestia-nova.sh install
+./install-deblestia-nova.sh launch
+```
+
+### Deblestia Nova Lite
+
+```bash
+./install-deblestia-nova-lite.sh check
+./install-deblestia-nova-lite.sh install
+```
+
+### Deblestia Shell
+
+```bash
+./install-deblestia-shell.sh check
+./install-deblestia-shell.sh install
+```
+
+### Deblestia Nova 2 (compatibilité)
 
 Nova 2 est la barre Waybar horizontale multi-écran. Elle affecte les bureaux
 1–10 à `eDP-1` et 11–20 à `HDMI-A-1`, sans modifier la résolution ni la
@@ -69,6 +110,16 @@ git sparse-checkout set config/caelestia config/hypr config/v2
 ```
 
 ### MPVpaper Engine
+
+Le HUD dispose d’un affichage de bureau indépendant du fond d’écran et d’un
+éditeur unique : [réglages, dépendances et dépannage](docs/MPVPAPER-HUD.md).
+
+<p align="center">
+  <a href="https://youtu.be/2UVaLgqGK7k?si=VjY4wZeRyzTsoTa_">
+    <img src="https://img.youtube.com/vi/2UVaLgqGK7k/maxresdefault.jpg"
+         alt="Démonstration MPVpaper Engine sur YouTube" width="800">
+  </a>
+</p>
 
 ```bash
 git clone --depth 1 --filter=blob:none --sparse https://github.com/kebemouhamet08-gif/Debian-Hyprland-Custom.git mpvpaper-engine

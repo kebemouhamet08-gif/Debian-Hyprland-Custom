@@ -319,3 +319,9 @@ class EngineClient:
 
     def refresh_hud(self, output: str) -> dict[str, Any]:
         return self.request("refresh_hud", {"output": output})
+
+    def preview_hud(self, output: str, settings: dict[str, Any]) -> dict[str, Any]:
+        return self.request("preview_hud", {"output": output, "settings": settings})
+
+    def clear_hud_preview(self, output: str) -> dict[str, Any]:
+        return self.request("clear_hud_preview", {"output": output})

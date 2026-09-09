@@ -63,6 +63,9 @@ class SystemdManager:
         executable = shutil.which("mpvpaper")
         if executable is None:
             raise SystemdError("mpvpaper is not installed")
+        if output != "*":
+            # A previous wildcard unit must not retain ownership of the desktop.
+            self.stop_output("*")
         command = [
             "systemd-run", "--user", "--quiet", "--collect",
             f"--unit={unit_for_output(output)}", executable,

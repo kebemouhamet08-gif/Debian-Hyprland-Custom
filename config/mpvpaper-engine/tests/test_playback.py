@@ -6,6 +6,7 @@ import tempfile
 import threading
 from types import SimpleNamespace
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 
@@ -74,6 +75,12 @@ class PlaybackTests(unittest.TestCase):
         self.wallpaper = Path(self.temporary.name) / "wall.mp4"
         self.wallpaper.write_bytes(b"video")
 
+    def _controller_with_fake_provider(self, detector=None):
+        return PlaybackController(
+            self.config, self.paths, systemd=self.systemd,
+            provider_manager=mock.Mock(), monitor_detector=detector,
+        )
+
     def tearDown(self):
         self.temporary.cleanup()
 
@@ -115,9 +122,75 @@ class PlaybackTests(unittest.TestCase):
         self.systemd.start_output.assert_not_called()
         self.assertIn(("set_property", "contrast", 4), mpv.commands)
 
+    def test_wildcard_play_dispatches_to_connected_physical_outputs(self):
+        controller = self._controller_with_fake_provider(
+            lambda: [
+                SimpleNamespace(name="eDP-1"),
+                SimpleNamespace(name="HDMI-A-1"),
+            ]
+        )
+        controller._play_output = mock.Mock(return_value="loadfile")
+        result = controller.play("*", self.wallpaper)
+        self.assertEqual(result, "loadfile")
+        controller._play_output.assert_has_calls([
+            mock.call("eDP-1", self.wallpaper),
+            mock.call("HDMI-A-1", self.wallpaper),
+        ])
+
     def test_generated_service_options_disable_terminal_spam(self):
         options = self.controller._mpv_options("DP-1", self.controller._profile("DP-1"))
         self.assertIn("terminal=no", options)
+
+    def test_image_options_keep_image_open_without_embedding_hud(self):
+        image = Path(self.temporary.name) / "wall.png"
+        image.write_bytes(b"image")
+        options = self.controller._mpv_options("DP-1", self.controller._profile("DP-1"))
+        self.assertIn("image-display-duration=inf", options)
+        self.assertIn("keep-open=yes", options)
+        self.assertNotIn("sub-file=", options)
+        self.assertNotIn("sid=", options)
+
+    def test_legacy_hud_cleanup_leaves_other_subtitles_untouched(self):
+        client = mock.Mock()
+        client.get_property.return_value = [
+            {"type": "sub", "id": 7, "external-filename": str(self.controller.hud.path("DP-1"))},
+            {"type": "sub", "id": 8, "external-filename": "/other/subtitle.ass"},
+        ]
+        self.controller._apply_hud(client, "DP-1")
+        client.command.assert_called_once_with("sub-remove", 7)
+
+    def test_hud_preview_is_temporary_and_restores_persistent_settings(self):
+        persistent = {"enabled": True, "position": {"x": 0.2, "y": 0.3}}
+        self.controller.configure_hud(persistent)
+        original_config = dict(self.config.ui)
+        rendered = []
+
+        def refresh(output):
+            rendered.append(self.controller.hud.settings_for_output(
+                output, self.controller._hud_previews.get(output)
+            ).x)
+            return True
+
+        self.controller.refresh_hud = refresh
+        self.controller.state = mock.Mock(outputs={"DP-1": mock.Mock()})
+        self.assertEqual(
+            self.controller.preview_hud(
+                "DP-1", {"position": {"x": 0.8, "y": 0.7}}
+            ),
+            {"previewed": ["DP-1"]},
+        )
+        self.assertEqual(rendered[-1], 0.8)
+        self.controller.clear_hud_preview("DP-1")
+        self.assertEqual(rendered[-1], 0.2)
+        self.assertEqual(self.config.ui, original_config)
+
+    def test_wildcard_hud_preview_refreshes_all_outputs(self):
+        self.controller.monitor_detector = lambda: [SimpleNamespace(name="DP-1"), SimpleNamespace(name="DP-2")]
+        self.controller.state = mock.Mock(outputs={"DP-1": mock.Mock(), "DP-2": mock.Mock()})
+        self.controller.refresh_hud = mock.Mock(return_value=True)
+        result = self.controller.preview_hud("*", {"enabled": True})
+        self.assertEqual(result, {"previewed": ["DP-1", "DP-2"]})
+        self.controller.refresh_hud.assert_has_calls([mock.call("DP-1"), mock.call("DP-2")])
 
     def test_play_falls_back_to_transient_systemd(self):
         with mock.patch.object(
@@ -125,7 +198,7 @@ class PlaybackTests(unittest.TestCase):
         ):
             strategy = self.controller.play("DP-1", self.wallpaper)
         self.assertEqual(strategy, "systemd")
-        self.systemd.stop_output.assert_called_once_with("DP-1")
+        self.systemd.stop_output.assert_has_calls([mock.call("*"), mock.call("DP-1")])
         self.systemd.start_output.assert_called_once()
 
     def test_missing_or_unsupported_wallpaper_is_rejected(self):

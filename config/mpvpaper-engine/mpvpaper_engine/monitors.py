@@ -32,6 +32,7 @@ class MonitorInfo:
     y: int | None = None
     scale: float | None = None
     focused: bool = False
+    transform: int = 0
 
 
 def detect_monitors(runner: Callable = subprocess.run) -> list[MonitorInfo]:
@@ -52,7 +53,7 @@ def detect_monitors(runner: Callable = subprocess.run) -> list[MonitorInfo]:
         raise MonitorError("hyprctl monitor response is not a list")
     monitors = []
     for item in data:
-        if not isinstance(item, dict) or not validate_output_name(item.get("name")):
+        if not isinstance(item, dict) or item.get("disabled") is True or not validate_output_name(item.get("name")):
             continue
         monitors.append(MonitorInfo(
             name=item["name"],
@@ -69,6 +70,7 @@ def detect_monitors(runner: Callable = subprocess.run) -> list[MonitorInfo]:
                 if isinstance(item.get("scale"), (int, float)) else None
             ),
             focused=item.get("focused") is True,
+            transform=item.get("transform", 0) if isinstance(item.get("transform", 0), int) else 0,
         ))
     return monitors
 
